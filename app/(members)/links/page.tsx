@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import AmazonInvitesClient from "@/app/components/amazon-invites-client";
+import AmazonInvitesClient from "@/components/amazon-invites-client";
 
 export default async function LinksPage() {
   const supabase = await createClient();

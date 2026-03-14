@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import AdminSubnav from "@/app/components/admin-subnav";
+import AdminSubnav from "@/components/admin-subnav";
 
 async function requireAdmin() {
   const supabase = await createClient();

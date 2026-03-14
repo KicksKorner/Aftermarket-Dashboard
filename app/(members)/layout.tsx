@@ -1,4 +1,4 @@
-import Sidebar from "@/app/components/sidebar";
+import Sidebar from "@/components/sidebar";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
