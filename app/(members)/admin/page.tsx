@@ -1,9 +1,12 @@
-import Link from "next/link";
+import AdminSubnav from "@/app/components/admin-subnav";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import AdminSubnav from "@/app/components/admin-subnav";
 
-export default async function AdminOverviewPage() {
+export default async function MembersLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const supabase = await createClient();
 
   const {
@@ -20,53 +23,24 @@ export default async function AdminOverviewPage() {
     .eq("id", user.id)
     .single();
 
-  if (profile?.role !== "admin") {
-    redirect("/dashboard");
-  }
-
   return (
-    <main className="min-h-screen bg-[#030814] px-6 py-8 text-white">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-8 rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.96),rgba(5,10,26,0.92))] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-          <p className="text-sm text-blue-300">Aftermarket Arbitrage</p>
-          <h1 className="mt-2 text-3xl font-semibold">Admin Overview</h1>
-          <p className="mt-2 text-sm text-slate-400">{user.email}</p>
-        </div>
+    <div className="min-h-screen overflow-hidden bg-[#030814] text-white">
+      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(to_right,rgba(53,86,180,0.08)_1px,transparent_1px)] bg-[size:48px_48px]" />
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,rgba(44,91,255,0.18),transparent_35%)]" />
 
-        <AdminSubnav />
+      <div className="relative flex min-h-screen">
+        <Sidebar role={profile?.role ?? "member"} email={user.email ?? ""} />
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <Link
-            href="/admin/amazon-invites"
-            className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 transition hover:border-blue-400/30 hover:-translate-y-0.5"
-          >
-            <h2 className="text-xl font-semibold">Amazon Invites</h2>
-            <p className="mt-2 text-sm text-slate-400">
-              Add, edit and delete product invite cards.
-            </p>
-          </Link>
+        <main className="flex-1">
+          <div className="border-b border-white/10 bg-[#071021]/60 px-8 py-5 backdrop-blur-xl">
+            <h2 className="text-xl font-semibold tracking-tight">
+              Aftermarket Arbitrage Dashboard
+            </h2>
+          </div>
 
-          <Link
-            href="/admin/pokemon-products"
-            className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 transition hover:border-blue-400/30 hover:-translate-y-0.5"
-          >
-            <h2 className="text-xl font-semibold">Pokemon Products</h2>
-            <p className="mt-2 text-sm text-slate-400">
-              Manage tracked products inside each Pokémon set.
-            </p>
-          </Link>
-
-          <Link
-            href="/admin/guides"
-            className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 transition hover:border-blue-400/30 hover:-translate-y-0.5"
-          >
-            <h2 className="text-xl font-semibold">Guides</h2>
-            <p className="mt-2 text-sm text-slate-400">
-              Create and update member training guides.
-            </p>
-          </Link>
-        </div>
+          <div className="p-8">{children}</div>
+        </main>
       </div>
-    </main>
+    </div>
   );
 }
