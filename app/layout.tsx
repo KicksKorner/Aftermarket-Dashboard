@@ -16,6 +16,11 @@ export const metadata = {
   description: "Members dashboard",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -23,7 +28,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${outfit.variable} ${inter.variable}`}>
+      <body
+        className={`${outfit.variable} ${inter.variable} overflow-x-hidden bg-[#030814]`}
+      >
         {children}
       </body>
     </html>

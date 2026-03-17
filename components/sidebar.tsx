@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useMemo, useState } from "react";
 import {
   LayoutDashboard,
   Link as LinkIcon,
@@ -13,25 +14,94 @@ import {
   Receipt,
   Mail,
   Footprints,
+  Menu,
+  X,
 } from "lucide-react";
 
-export default function Sidebar({
+type SidebarProps = {
+  role: string;
+  email: string;
+};
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  startsWith?: boolean;
+  adminOnly?: boolean;
+};
+
+const navItems: NavItem[] = [
+  {
+    href: "/dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+  },
+  {
+    href: "/dashboard/sole-scan",
+    label: "Sole Scan",
+    icon: Footprints,
+    startsWith: true,
+  },
+  {
+    href: "/dashboard/inventory",
+    label: "Inventory Tracker",
+    icon: Boxes,
+    startsWith: true,
+  },
+  {
+    href: "/dashboard/expenses",
+    label: "Expenses",
+    icon: Receipt,
+    startsWith: true,
+  },
+  {
+    href: "/dashboard/gmail-sync",
+    label: "Gmail Sync",
+    icon: Mail,
+    startsWith: true,
+  },
+  {
+    href: "/links",
+    label: "Amazon Invites",
+    icon: LinkIcon,
+  },
+  {
+    href: "/guides",
+    label: "Guides",
+    icon: BookOpen,
+  },
+  {
+    href: "/admin",
+    label: "Admin",
+    icon: Shield,
+    adminOnly: true,
+  },
+];
+
+function SidebarContent({
   role,
   email,
+  pathname,
+  onNavigate,
 }: {
   role: string;
   email: string;
+  pathname: string;
+  onNavigate?: () => void;
 }) {
-  const pathname = usePathname();
-
   const baseItem =
     "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition";
   const activeItem =
     "border border-white/10 bg-white/10 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)]";
   const inactiveItem = "text-slate-300 hover:bg-white/5 hover:text-white";
 
+  const filteredItems = useMemo(() => {
+    return navItems.filter((item) => !item.adminOnly || role === "admin");
+  }, [role]);
+
   return (
-    <aside className="w-[270px] border-r border-white/10 bg-[#071021]/80 p-6 backdrop-blur-xl">
+    <div className="flex h-full flex-col">
       <div className="mb-8 flex items-center gap-3">
         <Image
           src="/logo.png"
@@ -58,98 +128,27 @@ export default function Sidebar({
       </div>
 
       <nav className="space-y-2">
-        <Link
-          href="/dashboard"
-          className={`${baseItem} ${
-            pathname === "/dashboard" ? activeItem : inactiveItem
-          }`}
-        >
-          <LayoutDashboard size={18} />
-          Dashboard
-        </Link>
+        {filteredItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = item.startsWith
+            ? pathname.startsWith(item.href)
+            : pathname === item.href;
 
-        <Link
-          href="/dashboard/sole-scan"
-          className={`${baseItem} ${
-            pathname.startsWith("/dashboard/sole-scan")
-              ? activeItem
-              : inactiveItem
-          }`}
-        >
-          <Footprints size={18} />
-          Sole Scan
-        </Link>
-
-        <Link
-          href="/dashboard/inventory"
-          className={`${baseItem} ${
-            pathname.startsWith("/dashboard/inventory")
-              ? activeItem
-              : inactiveItem
-          }`}
-        >
-          <Boxes size={18} />
-          Inventory Tracker
-        </Link>
-
-        <Link
-          href="/dashboard/expenses"
-          className={`${baseItem} ${
-            pathname.startsWith("/dashboard/expenses")
-              ? activeItem
-              : inactiveItem
-          }`}
-        >
-          <Receipt size={18} />
-          Expenses
-        </Link>
-
-        <Link
-          href="/dashboard/gmail-sync"
-          className={`${baseItem} ${
-            pathname.startsWith("/dashboard/gmail-sync")
-              ? activeItem
-              : inactiveItem
-          }`}
-        >
-          <Mail size={18} />
-          Gmail Sync
-        </Link>
-
-        <Link
-          href="/links"
-          className={`${baseItem} ${
-            pathname === "/links" ? activeItem : inactiveItem
-          }`}
-        >
-          <LinkIcon size={18} />
-          Amazon Invites
-        </Link>
-
-        <Link
-          href="/guides"
-          className={`${baseItem} ${
-            pathname === "/guides" ? activeItem : inactiveItem
-          }`}
-        >
-          <BookOpen size={18} />
-          Guides
-        </Link>
-
-        {role === "admin" && (
-          <Link
-            href="/admin"
-            className={`${baseItem} ${
-              pathname === "/admin" ? activeItem : inactiveItem
-            }`}
-          >
-            <Shield size={18} />
-            Admin
-          </Link>
-        )}
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onNavigate}
+              className={`${baseItem} ${isActive ? activeItem : inactiveItem}`}
+            >
+              <Icon size={18} />
+              {item.label}
+            </Link>
+          );
+        })}
       </nav>
 
-      <div className="mt-10">
+      <div className="mt-auto pt-8">
         <form action="/auth/signout" method="post">
           <button className="flex w-full items-center gap-3 rounded-2xl border border-blue-500/20 bg-blue-600/15 px-4 py-3 text-sm font-medium text-white transition hover:bg-blue-600/25">
             <LogOut size={18} />
@@ -157,6 +156,98 @@ export default function Sidebar({
           </button>
         </form>
       </div>
-    </aside>
+    </div>
+  );
+}
+
+export default function Sidebar({ role, email }: SidebarProps) {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      {/* Mobile top bar */}
+      <div className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-[#071021]/95 backdrop-blur-xl lg:hidden">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <Image
+              src="/logo.png"
+              alt="Aftermarket Arbitrage"
+              width={34}
+              height={34}
+              className="rounded-lg"
+            />
+            <div>
+              <p className="text-[11px] text-blue-300">Aftermarket Arbitrage</p>
+              <p className="text-base font-semibold leading-tight text-white">
+                Members Area
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white"
+            aria-label="Open menu"
+          >
+            <Menu size={20} />
+          </button>
+        </div>
+      </div>
+
+      {/* Desktop sidebar */}
+      <aside className="hidden h-screen w-[270px] border-r border-white/10 bg-[#071021]/80 p-6 backdrop-blur-xl lg:sticky lg:top-0 lg:flex lg:flex-col">
+        <SidebarContent role={role} email={email} pathname={pathname} />
+      </aside>
+
+      {/* Mobile drawer */}
+      {open ? (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setOpen(false)}
+            aria-label="Close menu overlay"
+          />
+
+          <aside className="absolute left-0 top-0 h-full w-[86%] max-w-[320px] border-r border-white/10 bg-[#071021] p-5 shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
+            <div className="mb-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Image
+                  src="/logo.png"
+                  alt="Aftermarket Arbitrage"
+                  width={38}
+                  height={38}
+                  className="rounded-lg"
+                />
+                <div>
+                  <p className="text-xs text-blue-300">Aftermarket Arbitrage</p>
+                  <p className="text-lg font-semibold text-white">
+                    Members Area
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white"
+                aria-label="Close menu"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <SidebarContent
+              role={role}
+              email={email}
+              pathname={pathname}
+              onNavigate={() => setOpen(false)}
+            />
+          </aside>
+        </div>
+      ) : null}
+    </>
   );
 }

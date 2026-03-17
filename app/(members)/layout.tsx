@@ -1,6 +1,6 @@
-import Sidebar from "@/components/sidebar";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import Sidebar from "@/components/sidebar";
 
 export default async function MembersLayout({
   children,
@@ -23,24 +23,16 @@ export default async function MembersLayout({
     .eq("id", user.id)
     .single();
 
+  const role = profile?.role ?? "member";
+  const email = user.email ?? "";
+
   return (
-    <div className="min-h-screen overflow-hidden bg-[#030814] text-white">
-      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(to_right,rgba(53,86,180,0.08)_1px,transparent_1px)] bg-[size:48px_48px]" />
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,rgba(44,91,255,0.18),transparent_35%)]" />
+    <div className="min-h-screen bg-[#030814] text-white lg:grid lg:grid-cols-[270px_minmax(0,1fr)]">
+      <Sidebar role={role} email={email} />
 
-      <div className="relative flex min-h-screen">
-        <Sidebar role={profile?.role ?? "member"} email={user.email ?? ""} />
-
-        <main className="flex-1">
-          <div className="border-b border-white/10 bg-[#071021]/60 px-8 py-5 backdrop-blur-xl">
-            <h2 className="text-xl font-semibold tracking-tight">
-              Aftermarket Arbitrage Dashboard
-            </h2>
-          </div>
-
-          <div className="p-8">{children}</div>
-        </main>
-      </div>
+      <main className="min-w-0 overflow-x-hidden px-4 pb-6 pt-20 sm:px-5 lg:px-8 lg:pb-8 lg:pt-6">
+        {children}
+      </main>
     </div>
   );
 }
