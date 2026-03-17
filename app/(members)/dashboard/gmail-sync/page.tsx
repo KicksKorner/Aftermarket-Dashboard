@@ -130,7 +130,7 @@ export default async function GmailSyncPage() {
           { uid: true }
         );
 
-        if (!uids.length) {
+if (Array.isArray(uids) && uids.length > 0) {
           await supabase
             .from("gmail_connections")
             .update({ last_synced_at: new Date().toISOString() })
