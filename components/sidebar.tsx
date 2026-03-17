@@ -9,7 +9,10 @@ import {
   BookOpen,
   Shield,
   LogOut,
-  LineChart,
+  Boxes,
+  Receipt,
+  Mail,
+  Footprints,
 } from "lucide-react";
 
 export default function Sidebar({
@@ -66,6 +69,54 @@ export default function Sidebar({
         </Link>
 
         <Link
+          href="/dashboard/sole-scan"
+          className={`${baseItem} ${
+            pathname.startsWith("/dashboard/sole-scan")
+              ? activeItem
+              : inactiveItem
+          }`}
+        >
+          <Footprints size={18} />
+          Sole Scan
+        </Link>
+
+        <Link
+          href="/dashboard/inventory"
+          className={`${baseItem} ${
+            pathname.startsWith("/dashboard/inventory")
+              ? activeItem
+              : inactiveItem
+          }`}
+        >
+          <Boxes size={18} />
+          Inventory Tracker
+        </Link>
+
+        <Link
+          href="/dashboard/expenses"
+          className={`${baseItem} ${
+            pathname.startsWith("/dashboard/expenses")
+              ? activeItem
+              : inactiveItem
+          }`}
+        >
+          <Receipt size={18} />
+          Expenses
+        </Link>
+
+        <Link
+          href="/dashboard/gmail-sync"
+          className={`${baseItem} ${
+            pathname.startsWith("/dashboard/gmail-sync")
+              ? activeItem
+              : inactiveItem
+          }`}
+        >
+          <Mail size={18} />
+          Gmail Sync
+        </Link>
+
+        <Link
           href="/links"
           className={`${baseItem} ${
             pathname === "/links" ? activeItem : inactiveItem
@@ -73,18 +124,6 @@ export default function Sidebar({
         >
           <LinkIcon size={18} />
           Amazon Invites
-        </Link>
-
-        <Link
-          href="/pokemon-market-tracker"
-          className={`${baseItem} ${
-            pathname.startsWith("/pokemon-market-tracker")
-              ? activeItem
-              : inactiveItem
-          }`}
-        >
-          <LineChart size={18} />
-          Pokemon Market Tracker
         </Link>
 
         <Link
