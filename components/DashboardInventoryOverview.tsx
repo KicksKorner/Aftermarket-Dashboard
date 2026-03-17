@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Boxes, CheckSquare, Wallet, PoundSterling, TrendingUp } from "lucide-react";
+import {
+  Boxes,
+  CheckSquare,
+  Wallet,
+  PoundSterling,
+  TrendingUp,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { InventoryItem, getInventoryStats } from "@/lib/inventory";
 
@@ -15,13 +21,32 @@ function formatPercent(value: number) {
   return `${Number(value || 0).toFixed(1)}%`;
 }
 
-const statCards = [
+type StatKey =
+  | "inStockCount"
+  | "soldCount"
+  | "capitalLocked"
+  | "totalProfit"
+  | "avgROI";
+
+type StatCard = {
+  key: StatKey;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  iconWrap: string;
+  valueClass: string;
+  money?: boolean;
+  percent?: boolean;
+};
+
+const statCards: StatCard[] = [
   {
     key: "inStockCount",
     label: "IN STOCK",
     icon: Boxes,
     iconWrap: "border-amber-500/20 bg-amber-500/10 text-amber-300",
     valueClass: "text-white",
+    money: false,
+    percent: false,
   },
   {
     key: "soldCount",
@@ -29,6 +54,8 @@ const statCards = [
     icon: CheckSquare,
     iconWrap: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
     valueClass: "text-white",
+    money: false,
+    percent: false,
   },
   {
     key: "capitalLocked",
@@ -37,6 +64,7 @@ const statCards = [
     iconWrap: "border-white/10 bg-white/5 text-slate-300",
     valueClass: "text-white",
     money: true,
+    percent: false,
   },
   {
     key: "totalProfit",
@@ -45,6 +73,7 @@ const statCards = [
     iconWrap: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
     valueClass: "text-white",
     money: true,
+    percent: false,
   },
   {
     key: "avgROI",
@@ -52,12 +81,21 @@ const statCards = [
     icon: TrendingUp,
     iconWrap: "border-sky-500/20 bg-sky-500/10 text-sky-300",
     valueClass: "text-white",
+    money: false,
     percent: true,
   },
-] as const;
+];
+
+type DashboardStats = {
+  inStockCount: number;
+  soldCount: number;
+  capitalLocked: number;
+  totalProfit: number;
+  avgROI: number;
+};
 
 export default function DashboardInventoryOverview() {
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<DashboardStats>({
     inStockCount: 0,
     soldCount: 0,
     capitalLocked: 0,
@@ -79,7 +117,6 @@ export default function DashboardInventoryOverview() {
 
         if (userError || !user) {
           console.error("Could not get current user:", userError);
-          setLoading(false);
           return;
         }
 
@@ -91,14 +128,19 @@ export default function DashboardInventoryOverview() {
 
         if (error) {
           console.error("Failed to load inventory items:", error);
-          setLoading(false);
           return;
         }
 
         const items = (data ?? []) as InventoryItem[];
         const calculated = getInventoryStats(items);
 
-        setStats(calculated);
+        setStats({
+          inStockCount: Number(calculated.inStockCount ?? 0),
+          soldCount: Number(calculated.soldCount ?? 0),
+          capitalLocked: Number(calculated.capitalLocked ?? 0),
+          totalProfit: Number(calculated.totalProfit ?? 0),
+          avgROI: Number(calculated.avgROI ?? 0),
+        });
       } catch (error) {
         console.error("Unexpected inventory stats error:", error);
       } finally {
@@ -106,7 +148,7 @@ export default function DashboardInventoryOverview() {
       }
     }
 
-    loadInventoryStats();
+    void loadInventoryStats();
   }, []);
 
   return (
@@ -115,14 +157,12 @@ export default function DashboardInventoryOverview() {
         const Icon = card.icon;
         const rawValue = stats[card.key];
 
-        let displayValue = rawValue;
+        let displayValue: string | number = rawValue;
 
         if (card.money) {
-          displayValue = formatCurrency(Number(rawValue));
-        }
-
-        if (card.percent) {
-          displayValue = formatPercent(Number(rawValue));
+          displayValue = formatCurrency(rawValue);
+        } else if (card.percent) {
+          displayValue = formatPercent(rawValue);
         }
 
         return (
@@ -136,7 +176,9 @@ export default function DashboardInventoryOverview() {
               <Icon size={20} />
             </div>
 
-            <div className={`text-[42px] font-semibold leading-none ${card.valueClass}`}>
+            <div
+              className={`text-[42px] font-semibold leading-none ${card.valueClass}`}
+            >
               {loading ? "..." : String(displayValue)}
             </div>
 
