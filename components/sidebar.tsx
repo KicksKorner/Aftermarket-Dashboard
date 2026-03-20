@@ -16,6 +16,7 @@ import {
   Footprints,
   Menu,
   X,
+  Send,
 } from "lucide-react";
 
 type SidebarProps = {
@@ -36,6 +37,12 @@ const navItems: NavItem[] = [
     href: "/dashboard",
     label: "Dashboard",
     icon: LayoutDashboard,
+  },
+  {
+    href: "/dashboard/deal-post",
+    label: "Deal Poster",
+    icon: Send,
+    startsWith: true,
   },
   {
     href: "/dashboard/sole-scan",
@@ -166,7 +173,6 @@ export default function Sidebar({ role, email }: SidebarProps) {
 
   return (
     <>
-      {/* Mobile top bar */}
       <div className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-[#071021]/95 backdrop-blur-xl lg:hidden">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
@@ -196,12 +202,10 @@ export default function Sidebar({ role, email }: SidebarProps) {
         </div>
       </div>
 
-      {/* Desktop sidebar */}
       <aside className="hidden h-screen w-[270px] border-r border-white/10 bg-[#071021]/80 p-6 backdrop-blur-xl lg:sticky lg:top-0 lg:flex lg:flex-col">
         <SidebarContent role={role} email={email} pathname={pathname} />
       </aside>
 
-      {/* Mobile drawer */}
       {open ? (
         <div className="fixed inset-0 z-50 lg:hidden">
           <button

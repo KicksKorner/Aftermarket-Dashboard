@@ -12,9 +12,17 @@ import {
   Receipt,
   Mail,
   Footprints,
+  Send,
 } from "lucide-react";
 
 const featureCards = [
+  {
+    title: "Deal Poster",
+    subtitle: "Post clean deal alerts to Discord",
+    href: "/dashboard/deal-post",
+    icon: Send,
+    iconClasses: "border-blue-500/20 bg-blue-500/10 text-blue-300",
+  },
   {
     title: "Sole Scan",
     subtitle: "Scan SKUs and analyse trainer flips",
