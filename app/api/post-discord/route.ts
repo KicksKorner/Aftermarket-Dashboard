@@ -1,20 +1,75 @@
 import { NextResponse } from "next/server";
 
+type Destination = "amazon" | "sneakers";
+
 export async function POST(req: Request) {
   try {
-    const { description, price, link, imageUrl } = await req.json();
+    const { description, price, link, imageUrl, destination } = await req.json();
 
-    if (!description || !price || !link) {
+    if (!description || !price || !link || !destination) {
       return NextResponse.json(
-        { error: "Description, price and link are required." },
+        { error: "Description, price, link and destination are required." },
         { status: 400 }
       );
     }
 
-    const embed: Record<string, any> = {
-      title: "STEAL! 🚨",
-      description: `${description}\n\n[View Deal](${link})`,
-      color: 0x2563eb,
+    let parsedLink: URL;
+
+    try {
+      parsedLink = new URL(link);
+    } catch {
+      return NextResponse.json(
+        { error: "Please enter a valid full URL, including https://"},
+        { status: 400 }
+      );
+    }
+
+    const webhookConfigs: Record<
+      Destination,
+      {
+        webhook: string | undefined;
+        title: string;
+        color: number;
+        footer: string;
+        buttonText: string;
+      }
+    > = {
+      amazon: {
+        webhook: process.env.DISCORD_WEBHOOK_AMAZON,
+        title: "Amazon STEAL! Alert 🚨",
+        color: 0x2563eb,
+        footer: "Bargain Sniper UK • Amazon Deals",
+        buttonText: "View Deal",
+      },
+      sneakers: {
+        webhook: process.env.DISCORD_WEBHOOK_SNEAKERS,
+        title: "Percy Bargains Alert 🚨",
+        color: 0x22c55e,
+        footer: "Bargain Sniper UK • Sneakers",
+        buttonText: "View Deal",
+      },
+    };
+
+    if (destination !== "amazon" && destination !== "sneakers") {
+      return NextResponse.json(
+        { error: "Invalid destination selected." },
+        { status: 400 }
+      );
+    }
+
+    const config = webhookConfigs[destination];
+
+    if (!config.webhook) {
+      return NextResponse.json(
+        { error: "Selected webhook is not configured." },
+        { status: 500 }
+      );
+    }
+
+    const embed: Record<string, unknown> = {
+      title: config.title,
+      description: `${description}\n\n[${config.buttonText}](${parsedLink.toString()})`,
+      color: config.color,
       fields: [
         {
           name: "Price",
@@ -23,17 +78,15 @@ export async function POST(req: Request) {
         },
       ],
       footer: {
-        text: "Bargain Sniper UK",
+        text: config.footer,
       },
     };
 
     if (imageUrl) {
-      embed.image = {
-        url: imageUrl,
-      };
+      embed.image = { url: imageUrl };
     }
 
-    const discordRes = await fetch(process.env.DISCORD_WEBHOOK_URL as string, {
+    const discordRes = await fetch(config.webhook, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

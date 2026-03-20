@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Link as LinkIcon,
   PoundSterling,
@@ -9,13 +9,42 @@ import {
   BadgePoundSterling,
 } from "lucide-react";
 
+type Destination = "amazon" | "sneakers";
+
 export default function DealPostPage() {
+  const [destination, setDestination] = useState<Destination>("amazon");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [link, setLink] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+
+  const previewConfig = useMemo(() => {
+    if (destination === "amazon") {
+      return {
+        title: "Amazon STEAL! Alert 🚨",
+        colorClass: "border-blue-500",
+        priceClass:
+          "border-blue-400/20 bg-blue-500/10 text-blue-300",
+        footer: "Bargain Sniper UK • Amazon Deals",
+        destinationLabel: "Amazon",
+        buttonClass:
+          "bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 border border-blue-400/20",
+      };
+    }
+
+    return {
+      title: "Percy Bargains Alert 🚨",
+      colorClass: "border-emerald-500",
+      priceClass:
+        "border-emerald-400/20 bg-emerald-500/10 text-emerald-300",
+      footer: "Bargain Sniper UK • Sneakers",
+      destinationLabel: "Sneakers",
+      buttonClass:
+        "bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 border border-emerald-400/20",
+    };
+  }, [destination]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -29,6 +58,7 @@ export default function DealPostPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          destination,
           description,
           price,
           link,
@@ -69,8 +99,8 @@ export default function DealPostPage() {
               Deal Poster
             </h1>
             <p className="mt-3 max-w-2xl text-slate-400">
-              Quickly create a clean Discord deal post with a link, price,
-              description and optional image.
+              Create a clean Discord deal post, choose the destination webhook,
+              and preview the final style before sending.
             </p>
           </div>
         </div>
@@ -79,6 +109,20 @@ export default function DealPostPage() {
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6">
           <form onSubmit={handleSubmit} className="grid gap-5">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Send To
+              </label>
+              <select
+                value={destination}
+                onChange={(e) => setDestination(e.target.value as Destination)}
+                className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none focus:border-blue-400/40"
+              >
+                <option value="amazon">Amazon</option>
+                <option value="sneakers">Sneakers</option>
+              </select>
+            </div>
+
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-300">
                 Short Description
@@ -164,14 +208,24 @@ export default function DealPostPage() {
             Live Preview
           </div>
 
-          <div className="rounded-2xl border-l-4 border-blue-500 bg-[#2b2d31] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)]">
-            <p className="text-sm font-semibold text-white">STEAL! 🚨</p>
+          <div className="mb-4 inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-slate-300">
+            Sending to: {previewConfig.destinationLabel}
+          </div>
+
+          <div
+            className={`rounded-2xl border-l-4 ${previewConfig.colorClass} bg-[#2b2d31] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)]`}
+          >
+            <p className="text-sm font-semibold text-white">
+              {previewConfig.title}
+            </p>
 
             <div className="mt-3 whitespace-pre-line text-[15px] leading-7 text-slate-200">
               {description || "Your deal description will appear here."}
             </div>
 
-            <div className="mt-4 inline-flex rounded-full border border-blue-400/20 bg-blue-500/10 px-3 py-1 text-sm font-medium text-blue-300">
+            <div
+              className={`mt-4 inline-flex rounded-full border px-3 py-1 text-sm font-medium ${previewConfig.priceClass}`}
+            >
               £{price || "0.00"}
             </div>
 
@@ -180,9 +234,9 @@ export default function DealPostPage() {
                 href={link || "#"}
                 target="_blank"
                 rel="noreferrer"
-                className="break-all text-sm text-blue-400 underline underline-offset-2"
+                className={`inline-flex rounded-lg px-3 py-2 text-sm font-medium transition ${previewConfig.buttonClass}`}
               >
-                {link || "Your deal link will appear here"}
+                View Deal
               </a>
             </div>
 
@@ -199,6 +253,10 @@ export default function DealPostPage() {
                 Optional image preview will appear here
               </div>
             )}
+
+            <div className="mt-4 text-xs font-medium text-slate-300">
+              {previewConfig.footer}
+            </div>
           </div>
         </div>
       </section>
