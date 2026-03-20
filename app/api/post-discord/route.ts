@@ -2,13 +2,33 @@ import { NextResponse } from "next/server";
 
 type Destination = "amazon" | "sneakers";
 
+type RequestBody = {
+  description?: string;
+  price?: string;
+  link?: string;
+  imageUrl?: string;
+  destination?: string;
+};
+
+function isDestination(value: string): value is Destination {
+  return value === "amazon" || value === "sneakers";
+}
+
 export async function POST(req: Request) {
   try {
-    const { description, price, link, imageUrl, destination } = await req.json();
+    const body: RequestBody = await req.json();
+    const { description, price, link, imageUrl, destination } = body;
 
     if (!description || !price || !link || !destination) {
       return NextResponse.json(
         { error: "Description, price, link and destination are required." },
+        { status: 400 }
+      );
+    }
+
+    if (!isDestination(destination)) {
+      return NextResponse.json(
+        { error: "Invalid destination selected." },
         { status: 400 }
       );
     }
@@ -19,7 +39,7 @@ export async function POST(req: Request) {
       parsedLink = new URL(link);
     } catch {
       return NextResponse.json(
-        { error: "Please enter a valid full URL, including https://"},
+        { error: "Please enter a valid full URL, including https://" },
         { status: 400 }
       );
     }
@@ -49,13 +69,6 @@ export async function POST(req: Request) {
         buttonText: "View Deal",
       },
     };
-
-    if (destination !== "amazon" && destination !== "sneakers") {
-      return NextResponse.json(
-        { error: "Invalid destination selected." },
-        { status: 400 }
-      );
-    }
 
     const config = webhookConfigs[destination];
 
