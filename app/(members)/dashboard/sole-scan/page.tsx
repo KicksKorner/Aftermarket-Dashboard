@@ -39,25 +39,47 @@ function extractSkuFromText(text: string) {
     .toUpperCase()
     .replace(/[|]/g, "1")
     .replace(/[—–]/g, "-")
-    .replace(/\s+/g, " ");
+    .replace(/\s+/g, " ")
+    .trim();
 
   const patterns = [
-    /\b[A-Z]{2,3}\d{3,5}-\d{3,4}\b/g,
-    /\b[A-Z0-9]{2,6}-[A-Z0-9]{2,6}\b/g,
-    /\b[A-Z0-9]{3,6}\s?-\s?[A-Z0-9]{2,6}\b/g,
+    // Nike / Jordan: DD0204-004, BQ6472-105, CZ0790-001
+    /\b[A-Z]{2}\d{4}-\d{3}\b/g,
+
+    // ASICS: 1201A019-100, 1011B440-001
+    /\b\d{4}[A-Z]\d{3}-\d{3}\b/g,
+
+    // adidas: GX4126, IG2132
+    /\b[A-Z]{2}\d{4}\b/g,
+
+    // New Balance: M2002RDA, U990GR4
+    /\b[A-Z]\d{3,4}[A-Z]{2,3}\b/g,
+
+    // Salomon: L47132900, L41618600
+    /\bL\d{8}\b/g,
   ];
+
+  let bestMatch = "";
 
   for (const pattern of patterns) {
     const matches = cleaned.match(pattern);
-    if (matches?.length) {
-      const candidate = normaliseSkuText(matches[0].replace(/\s+/g, ""));
-      if (candidate.length >= 6 && candidate.includes("-")) {
-        return candidate;
+
+    if (matches && matches.length) {
+      for (const match of matches) {
+        const sku = match.trim();
+
+        if (sku.includes("-") && sku.length >= 9) {
+          return sku;
+        }
+
+        if (!bestMatch) {
+          bestMatch = sku;
+        }
       }
     }
   }
 
-  return "";
+  return bestMatch;
 }
 
 function drawPreprocessedLabelCrop(
@@ -141,12 +163,6 @@ function LabelScanner({ onDetected }: Props) {
       setPreviewImage("");
       setReady(false);
 
-      const video = videoRef.current;
-      if (!video) {
-        setError("Video element not found.");
-        return;
-      }
-
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: "environment",
@@ -157,6 +173,18 @@ function LabelScanner({ onDetected }: Props) {
       });
 
       streamRef.current = stream;
+      setScanning(true);
+
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const video = videoRef.current;
+      if (!video) {
+        setError("Video element not found.");
+        setScanning(false);
+        return;
+      }
+
       video.srcObject = stream;
 
       await new Promise<void>((resolve) => {
@@ -165,7 +193,6 @@ function LabelScanner({ onDetected }: Props) {
 
       await video.play();
 
-      setScanning(true);
       setReady(true);
       setHint(
         "Hold the SKU label inside the green frame. Keep the phone slightly back to avoid blur."
@@ -178,9 +205,13 @@ function LabelScanner({ onDetected }: Props) {
         };
 
         if (capabilities?.focusMode?.includes("continuous")) {
-          await track.applyConstraints({
-            advanced: [{ focusMode: "continuous" } as never],
-          });
+          try {
+            await track.applyConstraints({
+              advanced: [{ focusMode: "continuous" } as never],
+            });
+          } catch (focusError) {
+            console.error("Focus constraint not applied:", focusError);
+          }
         }
       }
     } catch (err) {
@@ -318,7 +349,8 @@ function LabelScanner({ onDetected }: Props) {
 
         {!scanning ? (
           <div className="flex min-h-[260px] items-center justify-center px-4 text-center text-sm text-slate-500">
-            Camera is closed. Open it to scan the trainer size label and read the SKU text.
+            Camera is closed. Open it to scan the trainer size label and read the
+            SKU text.
           </div>
         ) : null}
 
