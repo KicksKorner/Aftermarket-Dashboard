@@ -38,48 +38,108 @@ function extractSkuFromText(text: string) {
   const cleaned = text
     .toUpperCase()
     .replace(/[|]/g, "1")
+    .replace(/[O]/g, "0")
     .replace(/[—–]/g, "-")
+    .replace(/[^A-Z0-9#:\-\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
+  const compact = cleaned.replace(/\s+/g, "");
+
   const patterns = [
-    // Nike / Jordan: DD0204-004, BQ6472-105, CZ0790-001
+    // Nike / Jordan
     /\b[A-Z]{2}\d{4}-\d{3}\b/g,
 
-    // ASICS: 1201A019-100, 1011B440-001
+    // ASICS
     /\b\d{4}[A-Z]\d{3}-\d{3}\b/g,
 
-    // adidas: GX4126, IG2132
+    // adidas
     /\b[A-Z]{2}\d{4}\b/g,
 
-    // New Balance: M2002RDA, U990GR4
+    // adidas OCR-fuzzy fallback
+    /\b[A-Z0-9]{6}\b/g,
+
+    // New Balance
     /\b[A-Z]\d{3,4}[A-Z]{2,3}\b/g,
 
-    // Salomon: L47132900, L41618600
+    // Salomon
     /\bL\d{8}\b/g,
   ];
 
-  let bestMatch = "";
+  const priorityMatches: string[] = [];
 
-  for (const pattern of patterns) {
-    const matches = cleaned.match(pattern);
+  const hintPatterns = [
+    /(?:ART|ARTICLE|ART\.)[:\s#-]*([A-Z0-9]{6,10})/g,
+    /#([A-Z0-9]{6,10})/g,
+  ];
 
-    if (matches && matches.length) {
-      for (const match of matches) {
-        const sku = match.trim();
-
-        if (sku.includes("-") && sku.length >= 9) {
-          return sku;
-        }
-
-        if (!bestMatch) {
-          bestMatch = sku;
-        }
+  for (const pattern of hintPatterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(cleaned)) !== null) {
+      const candidate = match[1]?.replace(/\s+/g, "");
+      if (candidate && candidate.length >= 6) {
+        priorityMatches.push(candidate);
       }
     }
   }
 
-  return bestMatch;
+  for (const candidate of priorityMatches) {
+    if (/^[A-Z]{2}\d{4}$/.test(candidate)) return candidate;
+    if (/^[A-Z0-9]{6}$/.test(candidate)) return candidate;
+    if (/^[A-Z]{2}\d{4}-\d{3}$/.test(candidate)) return candidate;
+    if (/^\d{4}[A-Z]\d{3}-\d{3}$/.test(candidate)) return candidate;
+    if (/^[A-Z]\d{3,4}[A-Z]{2,3}$/.test(candidate)) return candidate;
+    if (/^L\d{8}$/.test(candidate)) return candidate;
+  }
+
+  const found: string[] = [];
+
+  for (const pattern of patterns) {
+    const matches = cleaned.match(pattern);
+    if (matches?.length) {
+      for (const match of matches) {
+        const sku = match.trim().replace(/\s+/g, "");
+        found.push(sku);
+      }
+    }
+  }
+
+  const ranked = found.sort((a, b) => {
+    const score = (value: string) => {
+      if (/^[A-Z]{2}\d{4}-\d{3}$/.test(value)) return 100;
+      if (/^\d{4}[A-Z]\d{3}-\d{3}$/.test(value)) return 95;
+      if (/^[A-Z]{2}\d{4}$/.test(value)) return 90;
+      if (/^[A-Z0-9]{6}$/.test(value)) return 80;
+      if (/^[A-Z]\d{3,4}[A-Z]{2,3}$/.test(value)) return 75;
+      if (/^L\d{8}$/.test(value)) return 70;
+      return 10;
+    };
+    return score(b) - score(a);
+  });
+
+  for (const sku of ranked) {
+    if (/^[A-Z]{2}\d{4}$/.test(sku)) return sku;
+    if (/^[A-Z0-9]{6}$/.test(sku)) return sku;
+    if (/^[A-Z]{2}\d{4}-\d{3}$/.test(sku)) return sku;
+    if (/^\d{4}[A-Z]\d{3}-\d{3}$/.test(sku)) return sku;
+    if (/^[A-Z]\d{3,4}[A-Z]{2,3}$/.test(sku)) return sku;
+    if (/^L\d{8}$/.test(sku)) return sku;
+  }
+
+  const compactMatches = [
+    compact.match(/[A-Z]{2}\d{4}-\d{3}/),
+    compact.match(/\d{4}[A-Z]\d{3}-\d{3}/),
+    compact.match(/[A-Z]{2}\d{4}/),
+    compact.match(/[A-Z0-9]{6}/),
+    compact.match(/[A-Z]\d{3,4}[A-Z]{2,3}/),
+    compact.match(/L\d{8}/),
+  ];
+
+  for (const match of compactMatches) {
+    if (match?.[0]) return match[0];
+  }
+
+  return "";
 }
 
 function drawPreprocessedLabelCrop(
@@ -91,18 +151,18 @@ function drawPreprocessedLabelCrop(
 
   if (!vw || !vh) return false;
 
-  const cropX = vw * 0.1;
-  const cropY = vh * 0.28;
-  const cropW = vw * 0.8;
-  const cropH = vh * 0.32;
+  const cropX = vw * 0.12;
+  const cropY = vh * 0.22;
+  const cropW = vw * 0.76;
+  const cropH = vh * 0.42;
 
-  outputCanvas.width = Math.round(cropW * 1.8);
-  outputCanvas.height = Math.round(cropH * 1.8);
+  outputCanvas.width = Math.round(cropW * 2.4);
+  outputCanvas.height = Math.round(cropH * 2.4);
 
   const ctx = outputCanvas.getContext("2d");
   if (!ctx) return false;
 
-  ctx.filter = "grayscale(1) contrast(1.6) brightness(1.1)";
+  ctx.filter = "grayscale(1) contrast(1.25) brightness(1.08) saturate(0)";
   ctx.drawImage(
     sourceVideo,
     cropX,
@@ -124,10 +184,11 @@ function drawPreprocessedLabelCrop(
   const data = imageData.data;
 
   for (let i = 0; i < data.length; i += 4) {
-    const value = data[i] > 145 ? 255 : 0;
-    data[i] = value;
-    data[i + 1] = value;
-    data[i + 2] = value;
+    const gray = data[i];
+    const boosted = Math.max(0, Math.min(255, gray > 165 ? 255 : gray * 1.08));
+    data[i] = boosted;
+    data[i + 1] = boosted;
+    data[i + 2] = boosted;
   }
 
   ctx.putImageData(imageData, 0, 0);
@@ -263,12 +324,52 @@ function LabelScanner({ onDetected }: Props) {
       const preview = canvas.toDataURL("image/jpeg", 0.95);
       setPreviewImage(preview);
 
-      const ocrResult = await Tesseract.recognize(preview, "eng", {
+      let sku = "";
+
+      const pass1 = await Tesseract.recognize(preview, "eng", {
         logger: () => {},
       });
+      sku = extractSkuFromText(pass1.data.text || "");
 
-      const rawText = ocrResult.data.text || "";
-      let sku = extractSkuFromText(rawText);
+      if (!sku) {
+        setHint("Trying enhanced label OCR...");
+
+        const thresholdCanvas = document.createElement("canvas");
+        thresholdCanvas.width = canvas.width;
+        thresholdCanvas.height = canvas.height;
+
+        const thresholdCtx = thresholdCanvas.getContext("2d");
+        if (!thresholdCtx) {
+          throw new Error("Could not create threshold canvas.");
+        }
+
+        thresholdCtx.drawImage(canvas, 0, 0);
+
+        const imageData = thresholdCtx.getImageData(
+          0,
+          0,
+          thresholdCanvas.width,
+          thresholdCanvas.height
+        );
+        const data = imageData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+          const gray = data[i];
+          const value = gray > 150 ? 255 : 0;
+          data[i] = value;
+          data[i + 1] = value;
+          data[i + 2] = value;
+        }
+
+        thresholdCtx.putImageData(imageData, 0, 0);
+
+        const thresholdPreview = thresholdCanvas.toDataURL("image/jpeg", 0.95);
+        const pass2 = await Tesseract.recognize(thresholdPreview, "eng", {
+          logger: () => {},
+        });
+
+        sku = extractSkuFromText(pass2.data.text || "");
+      }
 
       if (!sku) {
         setHint("Trying full-frame OCR...");
@@ -282,27 +383,27 @@ function LabelScanner({ onDetected }: Props) {
           throw new Error("Could not create full-frame OCR canvas.");
         }
 
-        fullCtx.filter = "grayscale(1) contrast(1.4) brightness(1.08)";
+        fullCtx.filter = "grayscale(1) contrast(1.2) brightness(1.05)";
         fullCtx.drawImage(video, 0, 0, fullCanvas.width, fullCanvas.height);
 
         const fullImage = fullCanvas.toDataURL("image/jpeg", 0.95);
-        const secondPass = await Tesseract.recognize(fullImage, "eng", {
+        const pass3 = await Tesseract.recognize(fullImage, "eng", {
           logger: () => {},
         });
 
-        sku = extractSkuFromText(secondPass.data.text || "");
+        sku = extractSkuFromText(pass3.data.text || "");
       }
 
       if (!sku) {
         setHint(
-          "No SKU found. Keep the phone a bit farther back, reduce glare, and try again."
+          "No SKU found. Keep the phone slightly farther back, reduce glare, and centre the article code in the frame."
         );
         setError("Could not detect SKU text.");
         return;
       }
 
       setDetected(true);
-      setHint("SKU detected.");
+      setHint(`SKU detected: ${sku}`);
       onDetected?.(sku);
     } catch (err) {
       console.error(err);
