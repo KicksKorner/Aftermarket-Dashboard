@@ -140,7 +140,12 @@ function LabelScanner({ onDetected }: Props) {
       setDetected(false);
       setPreviewImage("");
       setReady(false);
-      setScanning(false);
+
+      const video = videoRef.current;
+      if (!video) {
+        setError("Video element not found.");
+        return;
+      }
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -152,43 +157,32 @@ function LabelScanner({ onDetected }: Props) {
       });
 
       streamRef.current = stream;
-
-      const video = videoRef.current;
-      if (!video) {
-        setError("Video element not found.");
-        return;
-      }
-
       video.srcObject = stream;
 
-      video.onloadedmetadata = async () => {
-        try {
-          await video.play();
-          setReady(true);
-          setScanning(true);
-          setHint(
-            "Hold the SKU label inside the green frame. Keep the phone slightly back to avoid blur."
-          );
+      await new Promise<void>((resolve) => {
+        video.onloadedmetadata = () => resolve();
+      });
 
-          const track = stream.getVideoTracks()[0];
-          if (track) {
-            const capabilities = track.getCapabilities?.() as MediaTrackCapabilities & {
-              focusMode?: string[];
-            };
+      await video.play();
 
-            if (capabilities?.focusMode?.includes("continuous")) {
-              await track.applyConstraints({
-                advanced: [{ focusMode: "continuous" } as any],
-              });
-            }
-          }
-        } catch (playError) {
-          console.error("Play failed:", playError);
-          setError("Failed to start video playback.");
-          setReady(false);
-          setScanning(false);
+      setScanning(true);
+      setReady(true);
+      setHint(
+        "Hold the SKU label inside the green frame. Keep the phone slightly back to avoid blur."
+      );
+
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        const capabilities = track.getCapabilities?.() as MediaTrackCapabilities & {
+          focusMode?: string[];
+        };
+
+        if (capabilities?.focusMode?.includes("continuous")) {
+          await track.applyConstraints({
+            advanced: [{ focusMode: "continuous" } as never],
+          });
         }
-      };
+      }
     } catch (err) {
       console.error(err);
       setError("Unable to access camera.");
@@ -220,7 +214,7 @@ function LabelScanner({ onDetected }: Props) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
 
-      if (!video || !canvas) {
+      if (!video || !canvas || !ready) {
         setError("Camera is not ready yet.");
         return;
       }
@@ -315,29 +309,29 @@ function LabelScanner({ onDetected }: Props) {
       <p className="mb-3 text-sm text-slate-400">{hint}</p>
 
       <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black/30">
-        {scanning ? (
-          <>
-            <video
-              ref={videoRef}
-              className="h-auto w-full"
-              playsInline
-              muted
-            />
+        <video
+          ref={videoRef}
+          className={`h-auto w-full ${scanning ? "block" : "hidden"}`}
+          playsInline
+          muted
+        />
 
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="relative h-[150px] w-[82%] max-w-[420px] rounded-xl border-[3px] border-green-400 shadow-[0_0_12px_rgba(34,197,94,0.7),0_0_0_9999px_rgba(0,0,0,0.5)]">
-                <div className="absolute -left-1 -top-1 h-5 w-5 border-l-4 border-t-4 border-green-400" />
-                <div className="absolute -right-1 -top-1 h-5 w-5 border-r-4 border-t-4 border-green-400" />
-                <div className="absolute -bottom-1 -left-1 h-5 w-5 border-b-4 border-l-4 border-green-400" />
-                <div className="absolute -bottom-1 -right-1 h-5 w-5 border-b-4 border-r-4 border-green-400" />
-              </div>
-            </div>
-          </>
-        ) : (
+        {!scanning ? (
           <div className="flex min-h-[260px] items-center justify-center px-4 text-center text-sm text-slate-500">
             Camera is closed. Open it to scan the trainer size label and read the SKU text.
           </div>
-        )}
+        ) : null}
+
+        {scanning ? (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="relative h-[150px] w-[82%] max-w-[420px] rounded-xl border-[3px] border-green-400 shadow-[0_0_12px_rgba(34,197,94,0.7),0_0_0_9999px_rgba(0,0,0,0.5)]">
+              <div className="absolute -left-1 -top-1 h-5 w-5 border-l-4 border-t-4 border-green-400" />
+              <div className="absolute -right-1 -top-1 h-5 w-5 border-r-4 border-t-4 border-green-400" />
+              <div className="absolute -bottom-1 -left-1 h-5 w-5 border-b-4 border-l-4 border-green-400" />
+              <div className="absolute -bottom-1 -right-1 h-5 w-5 border-b-4 border-r-4 border-green-400" />
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-4 flex flex-wrap gap-3">
