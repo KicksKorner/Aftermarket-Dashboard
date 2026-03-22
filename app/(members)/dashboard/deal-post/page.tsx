@@ -11,22 +11,42 @@ import {
 
 type Destination = "amazon" | "sneakers";
 
+type ApiResponse = {
+  ok?: boolean;
+  error?: string;
+  results?: {
+    discord?: unknown;
+    x?: unknown;
+    facebook?: unknown;
+  };
+  errors?: {
+    discord?: unknown;
+    x?: unknown;
+    facebook?: unknown;
+  };
+};
+
 export default function DealPostPage() {
   const [destination, setDestination] = useState<Destination>("amazon");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [link, setLink] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+
+  const [postToDiscord, setPostToDiscord] = useState(true);
+  const [postToX, setPostToX] = useState(true);
+  const [postToFacebook, setPostToFacebook] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [result, setResult] = useState<ApiResponse | null>(null);
 
   const previewConfig = useMemo(() => {
     if (destination === "amazon") {
       return {
         title: "Amazon STEAL! Alert 🚨",
         colorClass: "border-blue-500",
-        priceClass:
-          "border-blue-400/20 bg-blue-500/10 text-blue-300",
+        priceClass: "border-blue-400/20 bg-blue-500/10 text-blue-300",
         footer: "Bargain Sniper UK • Amazon Deals",
         destinationLabel: "Amazon",
         buttonClass:
@@ -37,8 +57,7 @@ export default function DealPostPage() {
     return {
       title: "Percy Bargains Alert 🚨",
       colorClass: "border-emerald-500",
-      priceClass:
-        "border-emerald-400/20 bg-emerald-500/10 text-emerald-300",
+      priceClass: "border-emerald-400/20 bg-emerald-500/10 text-emerald-300",
       footer: "Bargain Sniper UK • Sneakers",
       destinationLabel: "Sneakers",
       buttonClass:
@@ -46,10 +65,30 @@ export default function DealPostPage() {
     };
   }, [destination]);
 
+  function renderStatus(label: string, success?: unknown, failure?: unknown) {
+    const state = success ? "Success" : failure ? "Failed" : "Not sent";
+
+    const stateClass = success
+      ? "text-emerald-300 border-emerald-400/20 bg-emerald-500/10"
+      : failure
+      ? "text-red-300 border-red-400/20 bg-red-500/10"
+      : "text-slate-300 border-white/10 bg-white/5";
+
+    return (
+      <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#030814] px-4 py-3">
+        <span className="text-sm font-medium text-slate-200">{label}</span>
+        <span className={`rounded-full border px-3 py-1 text-xs font-medium ${stateClass}`}>
+          {state}
+        </span>
+      </div>
+    );
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setMessage("");
+    setResult(null);
 
     try {
       const res = await fetch("/api/post-discord", {
@@ -63,13 +102,27 @@ export default function DealPostPage() {
           price,
           link,
           imageUrl,
+          postToDiscord,
+          postToX,
+          postToFacebook,
         }),
       });
 
-      const data = await res.json();
+      const data: ApiResponse = await res.json();
+      setResult(data);
 
-      if (!res.ok) {
-        setMessage(data.error || "Failed to post deal.");
+      if (!res.ok || !data.ok) {
+        if (data.errors) {
+          const failed = Object.keys(data.errors).join(", ");
+          setMessage(
+            failed
+              ? `Some posts failed: ${failed}`
+              : data.error || "Failed to post deal."
+          );
+        } else {
+          setMessage(data.error || "Failed to post deal.");
+        }
+
         setLoading(false);
         return;
       }
@@ -99,8 +152,8 @@ export default function DealPostPage() {
               Deal Poster
             </h1>
             <p className="mt-3 max-w-2xl text-slate-400">
-              Create a clean Discord deal post, choose the destination webhook,
-              and preview the final style before sending.
+              Create a clean deal post, choose the destination, preview the
+              final style, and send the same deal to Discord, X, and Facebook.
             </p>
           </div>
         </div>
@@ -186,17 +239,85 @@ export default function DealPostPage() {
               </div>
             </div>
 
+            <div className="rounded-2xl border border-white/10 bg-[#030814] p-4">
+              <div className="mb-3 text-sm font-medium text-slate-300">
+                Post Destinations
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={postToDiscord}
+                    onChange={(e) => setPostToDiscord(e.target.checked)}
+                    className="h-4 w-4 accent-blue-500"
+                  />
+                  <span>Discord</span>
+                </label>
+
+                <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={postToX}
+                    onChange={(e) => setPostToX(e.target.checked)}
+                    className="h-4 w-4 accent-blue-500"
+                  />
+                  <span>X / Twitter</span>
+                </label>
+
+                <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={postToFacebook}
+                    onChange={(e) => setPostToFacebook(e.target.checked)}
+                    className="h-4 w-4 accent-blue-500"
+                  />
+                  <span>Facebook</span>
+                </label>
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={loading}
               className="rounded-2xl bg-blue-600 px-4 py-4 text-base font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
             >
-              {loading ? "Posting..." : "Post to Discord"}
+              {loading ? "Posting..." : "Post Deal"}
             </button>
 
             {message ? (
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
                 {message}
+              </div>
+            ) : null}
+
+            {result ? (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="mb-3 text-sm font-semibold text-white">
+                  Post Results
+                </div>
+
+                <div className="space-y-3">
+                  {renderStatus(
+                    "Discord",
+                    result.results?.discord,
+                    result.errors?.discord
+                  )}
+                  {renderStatus("X / Twitter", result.results?.x, result.errors?.x)}
+                  {renderStatus(
+                    "Facebook",
+                    result.results?.facebook,
+                    result.errors?.facebook
+                  )}
+                </div>
+
+                {(result.errors?.discord ||
+                  result.errors?.x ||
+                  result.errors?.facebook) && (
+                  <pre className="mt-4 overflow-auto rounded-xl border border-red-400/10 bg-[#030814] p-3 text-xs text-red-200">
+{JSON.stringify(result.errors, null, 2)}
+                  </pre>
+                )}
               </div>
             ) : null}
           </form>
