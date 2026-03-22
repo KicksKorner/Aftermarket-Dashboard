@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   Send,
+  ScanSearch,
 } from "lucide-react";
 
 type SidebarProps = {
@@ -48,6 +49,12 @@ const navItems: NavItem[] = [
     href: "/dashboard/sole-scan",
     label: "Sole Scan",
     icon: Footprints,
+    startsWith: true,
+  },
+  {
+    href: "/dashboard/card-grading",
+    label: "Card Grading",
+    icon: ScanSearch,
     startsWith: true,
   },
   {
