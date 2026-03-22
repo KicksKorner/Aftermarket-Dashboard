@@ -46,97 +46,94 @@ function extractSkuFromText(text: string) {
 
   const compact = cleaned.replace(/\s+/g, "");
 
-  const patterns = [
-    // Nike / Jordan
-    /\b[A-Z]{2}\d{4}-\d{3}\b/g,
+  const isNike = (value: string) => /^[A-Z]{2}\d{4}-\d{3}$/.test(value);
+  const isAsics = (value: string) => /^\d{4}[A-Z]\d{3}-\d{3}$/.test(value);
+  const isAdidas = (value: string) => /^[A-Z]{2}\d{4}$/.test(value);
+  const isNewBalance = (value: string) =>
+    /^[A-Z]\d{3,4}[A-Z]{2,3}$/.test(value);
+  const isSalomon = (value: string) => /^L\d{8}$/.test(value);
 
-    // ASICS
-    /\b\d{4}[A-Z]\d{3}-\d{3}\b/g,
+  const looksLikeNoise = (value: string) => {
+    if (value.length < 6) return true;
+    if (/^[A-Z]{5,}$/.test(value)) return true;
+    if (/^[A-Z]{2}\d{4}$/.test(value)) return false;
+    if (!/^[A-Z0-9-]+$/.test(value)) return true;
 
-    // adidas
-    /\b[A-Z]{2}\d{4}\b/g,
+    const letters = (value.match(/[A-Z]/g) || []).length;
+    const digits = (value.match(/\d/g) || []).length;
 
-    // adidas OCR-fuzzy fallback
-    /\b[A-Z0-9]{6}\b/g,
+    if (digits === 0) return true;
+    if (letters >= 4 && digits <= 2) return true;
 
-    // New Balance
-    /\b[A-Z]\d{3,4}[A-Z]{2,3}\b/g,
+    return false;
+  };
 
-    // Salomon
-    /\bL\d{8}\b/g,
-  ];
-
-  const priorityMatches: string[] = [];
+  const candidates = new Set<string>();
 
   const hintPatterns = [
-    /(?:ART|ARTICLE|ART\.)[:\s#-]*([A-Z0-9]{6,10})/g,
-    /#([A-Z0-9]{6,10})/g,
+    /(?:ART|ARTICLE|ART\.)[:\s#-]*([A-Z0-9-]{6,12})/g,
+    /(?:SKU|STYLE)[:\s#-]*([A-Z0-9-]{6,12})/g,
   ];
 
   for (const pattern of hintPatterns) {
     let match: RegExpExecArray | null;
     while ((match = pattern.exec(cleaned)) !== null) {
       const candidate = match[1]?.replace(/\s+/g, "");
-      if (candidate && candidate.length >= 6) {
-        priorityMatches.push(candidate);
-      }
+      if (candidate) candidates.add(candidate);
     }
   }
 
-  for (const candidate of priorityMatches) {
-    if (/^[A-Z]{2}\d{4}$/.test(candidate)) return candidate;
-    if (/^[A-Z0-9]{6}$/.test(candidate)) return candidate;
-    if (/^[A-Z]{2}\d{4}-\d{3}$/.test(candidate)) return candidate;
-    if (/^\d{4}[A-Z]\d{3}-\d{3}$/.test(candidate)) return candidate;
-    if (/^[A-Z]\d{3,4}[A-Z]{2,3}$/.test(candidate)) return candidate;
-    if (/^L\d{8}$/.test(candidate)) return candidate;
-  }
+  const strictPatterns = [
+    /\b[A-Z]{2}\d{4}-\d{3}\b/g,
+    /\b\d{4}[A-Z]\d{3}-\d{3}\b/g,
+    /\b[A-Z]{2}\d{4}\b/g,
+    /\b[A-Z]\d{3,4}[A-Z]{2,3}\b/g,
+    /\bL\d{8}\b/g,
+  ];
 
-  const found: string[] = [];
-
-  for (const pattern of patterns) {
+  for (const pattern of strictPatterns) {
     const matches = cleaned.match(pattern);
     if (matches?.length) {
       for (const match of matches) {
-        const sku = match.trim().replace(/\s+/g, "");
-        found.push(sku);
+        candidates.add(match.trim().replace(/\s+/g, ""));
       }
     }
   }
 
-  const ranked = found.sort((a, b) => {
-    const score = (value: string) => {
-      if (/^[A-Z]{2}\d{4}-\d{3}$/.test(value)) return 100;
-      if (/^\d{4}[A-Z]\d{3}-\d{3}$/.test(value)) return 95;
-      if (/^[A-Z]{2}\d{4}$/.test(value)) return 90;
-      if (/^[A-Z0-9]{6}$/.test(value)) return 80;
-      if (/^[A-Z]\d{3,4}[A-Z]{2,3}$/.test(value)) return 75;
-      if (/^L\d{8}$/.test(value)) return 70;
-      return 10;
-    };
-    return score(b) - score(a);
-  });
+  const ranked = [...candidates]
+    .filter((value) => !looksLikeNoise(value))
+    .sort((a, b) => {
+      const score = (value: string) => {
+        if (isNike(value)) return 100;
+        if (isAsics(value)) return 95;
+        if (isAdidas(value)) return 90;
+        if (isNewBalance(value)) return 80;
+        if (isSalomon(value)) return 70;
+        return 0;
+      };
+      return score(b) - score(a);
+    });
 
-  for (const sku of ranked) {
-    if (/^[A-Z]{2}\d{4}$/.test(sku)) return sku;
-    if (/^[A-Z0-9]{6}$/.test(sku)) return sku;
-    if (/^[A-Z]{2}\d{4}-\d{3}$/.test(sku)) return sku;
-    if (/^\d{4}[A-Z]\d{3}-\d{3}$/.test(sku)) return sku;
-    if (/^[A-Z]\d{3,4}[A-Z]{2,3}$/.test(sku)) return sku;
-    if (/^L\d{8}$/.test(sku)) return sku;
+  for (const value of ranked) {
+    if (isNike(value)) return value;
+    if (isAsics(value)) return value;
+    if (isAdidas(value)) return value;
+    if (isNewBalance(value)) return value;
+    if (isSalomon(value)) return value;
   }
 
   const compactMatches = [
     compact.match(/[A-Z]{2}\d{4}-\d{3}/),
     compact.match(/\d{4}[A-Z]\d{3}-\d{3}/),
     compact.match(/[A-Z]{2}\d{4}/),
-    compact.match(/[A-Z0-9]{6}/),
     compact.match(/[A-Z]\d{3,4}[A-Z]{2,3}/),
     compact.match(/L\d{8}/),
   ];
 
   for (const match of compactMatches) {
-    if (match?.[0]) return match[0];
+    const candidate = match?.[0];
+    if (!candidate) continue;
+    if (!looksLikeNoise(candidate)) return candidate;
   }
 
   return "";
