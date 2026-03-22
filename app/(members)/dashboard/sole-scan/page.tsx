@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Tesseract from "tesseract.js";
 
 type Props = {
   onDetected?: (value: string) => void;
@@ -25,112 +26,330 @@ type AnalyseResult = {
 const RECENT_SCANS_KEY = "sole-scan-recent";
 const MAX_RECENT_SCANS = 8;
 
-function BarcodeScanner({ onDetected }: Props) {
-  const [scannerLoaded, setScannerLoaded] = useState(false);
-  const [scanning, setScanning] = useState(false);
-  const readerRef = useRef<HTMLDivElement | null>(null);
-  const html5QrCodeRef = useRef<any>(null);
+function normaliseSkuText(value: string) {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, "")
+    .replace(/--+/g, "-")
+    .trim();
+}
 
-  useEffect(() => {
-    let mounted = true;
+function extractSkuFromText(text: string) {
+  const cleaned = text
+    .toUpperCase()
+    .replace(/[|]/g, "1")
+    .replace(/[O]/g, "O")
+    .replace(/[—–]/g, "-")
+    .replace(/\s+/g, " ");
 
-    async function loadLibrary() {
-      try {
-        await import("html5-qrcode");
-        if (mounted) setScannerLoaded(true);
-      } catch (error) {
-        console.error("Failed to load scanner library:", error);
+  const patterns = [
+    /\b[A-Z]{2,3}\d{3,5}-\d{3,4}\b/g,
+    /\b[A-Z0-9]{2,6}-[A-Z0-9]{2,6}\b/g,
+    /\b[A-Z0-9]{3,6}\s?-\s?[A-Z0-9]{2,6}\b/g,
+  ];
+
+  for (const pattern of patterns) {
+    const matches = cleaned.match(pattern);
+    if (matches?.length) {
+      const candidate = normaliseSkuText(matches[0].replace(/\s+/g, ""));
+      if (candidate.length >= 6 && candidate.includes("-")) {
+        return candidate;
       }
-    }
-
-    loadLibrary();
-
-    return () => {
-      mounted = false;
-      void stopScanner();
-    };
-  }, []);
-
-  async function startScanner() {
-    try {
-      const { Html5Qrcode } = await import("html5-qrcode");
-
-      if (!readerRef.current) return;
-
-      const html5QrCode = new Html5Qrcode("sole-scan-reader");
-      html5QrCodeRef.current = html5QrCode;
-      setScanning(true);
-
-      await html5QrCode.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: { width: 280, height: 140 },
-        },
-        (decodedText: string) => {
-          const cleaned = decodedText.trim();
-          onDetected?.(cleaned);
-          void stopScanner();
-        },
-        () => {}
-      );
-    } catch (error) {
-      console.error("Failed to start scanner:", error);
-      setScanning(false);
-      alert("Could not start camera scanner.");
     }
   }
 
-  async function stopScanner() {
+  return "";
+}
+
+function drawPreprocessedLabelCrop(
+  sourceVideo: HTMLVideoElement,
+  outputCanvas: HTMLCanvasElement
+) {
+  const vw = sourceVideo.videoWidth;
+  const vh = sourceVideo.videoHeight;
+
+  if (!vw || !vh) return false;
+
+  const cropX = vw * 0.1;
+  const cropY = vh * 0.28;
+  const cropW = vw * 0.8;
+  const cropH = vh * 0.32;
+
+  outputCanvas.width = Math.round(cropW * 1.8);
+  outputCanvas.height = Math.round(cropH * 1.8);
+
+  const ctx = outputCanvas.getContext("2d");
+  if (!ctx) return false;
+
+  ctx.filter = "grayscale(1) contrast(1.6) brightness(1.1)";
+  ctx.drawImage(
+    sourceVideo,
+    cropX,
+    cropY,
+    cropW,
+    cropH,
+    0,
+    0,
+    outputCanvas.width,
+    outputCanvas.height
+  );
+
+  const imageData = ctx.getImageData(0, 0, outputCanvas.width, outputCanvas.height);
+  const data = imageData.data;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const value = data[i] > 145 ? 255 : 0;
+    data[i] = value;
+    data[i + 1] = value;
+    data[i + 2] = value;
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+
+  return true;
+}
+
+function LabelScanner({ onDetected }: Props) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const [ready, setReady] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [detected, setDetected] = useState(false);
+  const [error, setError] = useState("");
+  const [hint, setHint] = useState("Open the camera, line up the size label, then capture.");
+  const [previewImage, setPreviewImage] = useState<string>("");
+
+  useEffect(() => {
+    return () => {
+      void stopCamera();
+    };
+  }, []);
+
+  async function startCamera() {
     try {
-      if (html5QrCodeRef.current) {
-        await html5QrCodeRef.current.stop();
-        await html5QrCodeRef.current.clear();
-        html5QrCodeRef.current = null;
+      setError("");
+      setDetected(false);
+      setPreviewImage("");
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+        audio: false,
+      });
+
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        setReady(true);
+        setScanning(true);
+        setHint("Hold the SKU label inside the green frame and keep the phone slightly back to avoid blur.");
       }
-    } catch (error) {
-      console.error("Failed to stop scanner:", error);
-    } finally {
+
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        const capabilities = track.getCapabilities?.() as MediaTrackCapabilities & {
+          focusMode?: string[];
+        };
+
+        if (capabilities?.focusMode?.includes("continuous")) {
+          await track.applyConstraints({
+            advanced: [{ focusMode: "continuous" } as any],
+          });
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Unable to access camera.");
+      setReady(false);
       setScanning(false);
+    }
+  }
+
+  async function stopCamera() {
+    try {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    } catch (err) {
+      console.error("Failed to stop camera:", err);
+    } finally {
+      setReady(false);
+      setScanning(false);
+    }
+  }
+
+  async function captureAndRead() {
+    try {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+
+      if (!video || !canvas) {
+        setError("Camera is not ready yet.");
+        return;
+      }
+
+      setOcrLoading(true);
+      setError("");
+      setDetected(false);
+      setHint("Reading SKU text...");
+
+      const drew = drawPreprocessedLabelCrop(video, canvas);
+      if (!drew) {
+        throw new Error("Could not capture label area.");
+      }
+
+      const preview = canvas.toDataURL("image/jpeg", 0.95);
+      setPreviewImage(preview);
+
+      const ocrResult = await Tesseract.recognize(preview, "eng", {
+        logger: () => {},
+      });
+
+      const rawText = ocrResult.data.text || "";
+      let sku = extractSkuFromText(rawText);
+
+      if (!sku) {
+        setHint("Trying full-frame OCR...");
+        const fullCanvas = document.createElement("canvas");
+        fullCanvas.width = video.videoWidth;
+        fullCanvas.height = video.videoHeight;
+
+        const fullCtx = fullCanvas.getContext("2d");
+        if (!fullCtx) {
+          throw new Error("Could not create full-frame OCR canvas.");
+        }
+
+        fullCtx.filter = "grayscale(1) contrast(1.4) brightness(1.08)";
+        fullCtx.drawImage(video, 0, 0, fullCanvas.width, fullCanvas.height);
+
+        const fullImage = fullCanvas.toDataURL("image/jpeg", 0.95);
+        const secondPass = await Tesseract.recognize(fullImage, "eng", {
+          logger: () => {},
+        });
+
+        sku = extractSkuFromText(secondPass.data.text || "");
+      }
+
+      if (!sku) {
+        setHint("No SKU found. Keep the phone a bit farther back, reduce glare, and try again.");
+        setError("Could not detect SKU text.");
+        return;
+      }
+
+      setDetected(true);
+      setHint("SKU detected.");
+      onDetected?.(sku);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to read SKU text.");
+      setHint("Try again with better light and less blur.");
+    } finally {
+      setOcrLoading(false);
     }
   }
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Scan Label</h2>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">Scan Label / Read SKU Text</h2>
 
+        <div
+          className={`rounded-full px-3 py-1 text-xs font-semibold ${
+            detected
+              ? "border border-green-400/40 bg-green-500/20 text-green-300"
+              : ocrLoading
+              ? "border border-amber-400/40 bg-amber-500/20 text-amber-300"
+              : "border border-white/10 bg-slate-700/40 text-slate-300"
+          }`}
+        >
+          {detected ? "SKU detected" : ocrLoading ? "Reading..." : scanning ? "Camera live" : "Ready"}
+        </div>
+      </div>
+
+      <p className="mb-3 text-sm text-slate-400">{hint}</p>
+
+      <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black/30">
         {scanning ? (
-          <button
-            onClick={() => void stopScanner()}
-            className="rounded-lg border border-white/10 px-3 py-2 text-sm text-white transition hover:bg-white/5"
-          >
-            Stop Scan
-          </button>
+          <>
+            <video
+              ref={videoRef}
+              className="h-auto w-full"
+              playsInline
+              muted
+              autoPlay
+            />
+
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="relative h-[150px] w-[82%] max-w-[420px] rounded-xl border-[3px] border-green-400 shadow-[0_0_12px_rgba(34,197,94,0.7),0_0_0_9999px_rgba(0,0,0,0.5)]">
+                <div className="absolute -left-1 -top-1 h-5 w-5 border-l-4 border-t-4 border-green-400" />
+                <div className="absolute -right-1 -top-1 h-5 w-5 border-r-4 border-t-4 border-green-400" />
+                <div className="absolute -bottom-1 -left-1 h-5 w-5 border-b-4 border-l-4 border-green-400" />
+                <div className="absolute -bottom-1 -right-1 h-5 w-5 border-b-4 border-r-4 border-green-400" />
+              </div>
+            </div>
+          </>
         ) : (
-          <button
-            onClick={() => void startScanner()}
-            disabled={!scannerLoaded}
-            className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
-          >
-            Open Camera
-          </button>
+          <div className="flex min-h-[260px] items-center justify-center px-4 text-center text-sm text-slate-500">
+            Camera is closed. Open it to scan the trainer size label and read the SKU text.
+          </div>
         )}
       </div>
 
-      <p className="mb-3 text-sm text-slate-400">
-        Scan the barcode or manually enter the SKU below.
-      </p>
+      <div className="mt-4 flex flex-wrap gap-3">
+        {!scanning ? (
+          <button
+            onClick={() => void startCamera()}
+            className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-black transition hover:opacity-90"
+          >
+            Open Camera
+          </button>
+        ) : (
+          <>
+            <button
+              onClick={() => void captureAndRead()}
+              disabled={!ready || ocrLoading}
+              className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              {ocrLoading ? "Reading SKU..." : "Capture & Read SKU"}
+            </button>
 
-      <div
-        id="sole-scan-reader"
-        ref={readerRef}
-        className="min-h-[220px] w-full overflow-hidden rounded-xl border border-white/10 bg-black/30"
-      />
+            <button
+              onClick={() => void stopCamera()}
+              className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/5"
+            >
+              Stop Camera
+            </button>
+          </>
+        )}
+      </div>
 
-      {!scannerLoaded ? (
-        <p className="mt-3 text-xs text-slate-500">Loading scanner...</p>
+      {error ? (
+        <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {error}
+        </div>
       ) : null}
+
+      {previewImage ? (
+        <div className="mt-4 space-y-2">
+          <p className="text-xs uppercase tracking-wide text-slate-400">
+            OCR Preview
+          </p>
+          <img
+            src={previewImage}
+            alt="OCR preview"
+            className="max-w-full rounded-xl border border-white/10"
+          />
+        </div>
+      ) : null}
+
+      <canvas ref={canvasRef} className="hidden" />
     </div>
   );
 }
@@ -419,7 +638,7 @@ export default function SoleScanPage() {
         </div>
       </div>
 
-      <BarcodeScanner onDetected={handleDetected} />
+      <LabelScanner onDetected={handleDetected} />
 
       {loading ? <ResultSkeleton /> : null}
 
