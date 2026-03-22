@@ -38,7 +38,6 @@ function extractSkuFromText(text: string) {
   const cleaned = text
     .toUpperCase()
     .replace(/[|]/g, "1")
-    .replace(/[O]/g, "O")
     .replace(/[—–]/g, "-")
     .replace(/\s+/g, " ");
 
@@ -94,7 +93,12 @@ function drawPreprocessedLabelCrop(
     outputCanvas.height
   );
 
-  const imageData = ctx.getImageData(0, 0, outputCanvas.width, outputCanvas.height);
+  const imageData = ctx.getImageData(
+    0,
+    0,
+    outputCanvas.width,
+    outputCanvas.height
+  );
   const data = imageData.data;
 
   for (let i = 0; i < data.length; i += 4) {
@@ -119,8 +123,10 @@ function LabelScanner({ onDetected }: Props) {
   const [ocrLoading, setOcrLoading] = useState(false);
   const [detected, setDetected] = useState(false);
   const [error, setError] = useState("");
-  const [hint, setHint] = useState("Open the camera, line up the size label, then capture.");
-  const [previewImage, setPreviewImage] = useState<string>("");
+  const [hint, setHint] = useState(
+    "Open the camera, line up the size label, then capture."
+  );
+  const [previewImage, setPreviewImage] = useState("");
 
   useEffect(() => {
     return () => {
@@ -133,10 +139,12 @@ function LabelScanner({ onDetected }: Props) {
       setError("");
       setDetected(false);
       setPreviewImage("");
+      setReady(false);
+      setScanning(false);
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: { ideal: "environment" },
+          facingMode: "environment",
           width: { ideal: 1920 },
           height: { ideal: 1080 },
         },
@@ -145,26 +153,42 @@ function LabelScanner({ onDetected }: Props) {
 
       streamRef.current = stream;
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setReady(true);
-        setScanning(true);
-        setHint("Hold the SKU label inside the green frame and keep the phone slightly back to avoid blur.");
+      const video = videoRef.current;
+      if (!video) {
+        setError("Video element not found.");
+        return;
       }
 
-      const track = stream.getVideoTracks()[0];
-      if (track) {
-        const capabilities = track.getCapabilities?.() as MediaTrackCapabilities & {
-          focusMode?: string[];
-        };
+      video.srcObject = stream;
 
-        if (capabilities?.focusMode?.includes("continuous")) {
-          await track.applyConstraints({
-            advanced: [{ focusMode: "continuous" } as any],
-          });
+      video.onloadedmetadata = async () => {
+        try {
+          await video.play();
+          setReady(true);
+          setScanning(true);
+          setHint(
+            "Hold the SKU label inside the green frame. Keep the phone slightly back to avoid blur."
+          );
+
+          const track = stream.getVideoTracks()[0];
+          if (track) {
+            const capabilities = track.getCapabilities?.() as MediaTrackCapabilities & {
+              focusMode?: string[];
+            };
+
+            if (capabilities?.focusMode?.includes("continuous")) {
+              await track.applyConstraints({
+                advanced: [{ focusMode: "continuous" } as any],
+              });
+            }
+          }
+        } catch (playError) {
+          console.error("Play failed:", playError);
+          setError("Failed to start video playback.");
+          setReady(false);
+          setScanning(false);
         }
-      }
+      };
     } catch (err) {
       console.error(err);
       setError("Unable to access camera.");
@@ -175,6 +199,12 @@ function LabelScanner({ onDetected }: Props) {
 
   async function stopCamera() {
     try {
+      const video = videoRef.current;
+      if (video) {
+        video.pause();
+        video.srcObject = null;
+      }
+
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     } catch (err) {
@@ -217,6 +247,7 @@ function LabelScanner({ onDetected }: Props) {
 
       if (!sku) {
         setHint("Trying full-frame OCR...");
+
         const fullCanvas = document.createElement("canvas");
         fullCanvas.width = video.videoWidth;
         fullCanvas.height = video.videoHeight;
@@ -238,7 +269,9 @@ function LabelScanner({ onDetected }: Props) {
       }
 
       if (!sku) {
-        setHint("No SKU found. Keep the phone a bit farther back, reduce glare, and try again.");
+        setHint(
+          "No SKU found. Keep the phone a bit farther back, reduce glare, and try again."
+        );
         setError("Could not detect SKU text.");
         return;
       }
@@ -269,7 +302,13 @@ function LabelScanner({ onDetected }: Props) {
               : "border border-white/10 bg-slate-700/40 text-slate-300"
           }`}
         >
-          {detected ? "SKU detected" : ocrLoading ? "Reading..." : scanning ? "Camera live" : "Ready"}
+          {detected
+            ? "SKU detected"
+            : ocrLoading
+            ? "Reading..."
+            : scanning
+            ? "Camera live"
+            : "Ready"}
         </div>
       </div>
 
@@ -283,7 +322,6 @@ function LabelScanner({ onDetected }: Props) {
               className="h-auto w-full"
               playsInline
               muted
-              autoPlay
             />
 
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
