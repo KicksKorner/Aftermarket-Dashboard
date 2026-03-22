@@ -20,9 +20,9 @@ type ApiResponse = {
     facebook?: unknown;
   };
   errors?: {
-    discord?: unknown;
-    x?: unknown;
-    facebook?: unknown;
+    discord?: string | object | null;
+    x?: string | object | null;
+    facebook?: string | object | null;
   };
 };
 
@@ -65,7 +65,7 @@ export default function DealPostPage() {
     };
   }, [destination]);
 
-  function renderStatus(label: string, success?: unknown, failure?: unknown) {
+  function renderStatus(label: string, success: boolean, failure: boolean) {
     const state = success ? "Success" : failure ? "Failed" : "Not sent";
 
     const stateClass = success
@@ -77,7 +77,9 @@ export default function DealPostPage() {
     return (
       <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#030814] px-4 py-3">
         <span className="text-sm font-medium text-slate-200">{label}</span>
-        <span className={`rounded-full border px-3 py-1 text-xs font-medium ${stateClass}`}>
+        <span
+          className={`rounded-full border px-3 py-1 text-xs font-medium ${stateClass}`}
+        >
           {state}
         </span>
       </div>
@@ -300,22 +302,28 @@ export default function DealPostPage() {
                 <div className="space-y-3">
                   {renderStatus(
                     "Discord",
-                    result.results?.discord,
-                    result.errors?.discord
+                    Boolean(result?.results?.discord),
+                    Boolean(result?.errors?.discord)
                   )}
-                  {renderStatus("X / Twitter", result.results?.x, result.errors?.x)}
+                  {renderStatus(
+                    "X / Twitter",
+                    Boolean(result?.results?.x),
+                    Boolean(result?.errors?.x)
+                  )}
                   {renderStatus(
                     "Facebook",
-                    result.results?.facebook,
-                    result.errors?.facebook
+                    Boolean(result?.results?.facebook),
+                    Boolean(result?.errors?.facebook)
                   )}
                 </div>
 
-                {(result.errors?.discord ||
-                  result.errors?.x ||
-                  result.errors?.facebook) && (
+                {Boolean(
+                  result?.errors?.discord ||
+                    result?.errors?.x ||
+                    result?.errors?.facebook
+                ) && (
                   <pre className="mt-4 overflow-auto rounded-xl border border-red-400/10 bg-[#030814] p-3 text-xs text-red-200">
-{JSON.stringify(result.errors, null, 2)}
+                    {JSON.stringify(result.errors, null, 2)}
                   </pre>
                 )}
               </div>
