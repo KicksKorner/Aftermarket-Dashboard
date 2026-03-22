@@ -9,6 +9,8 @@ type CropRect = {
   height: number;
 };
 
+type DragMode = "move" | "left" | "right" | "top" | "bottom" | null;
+
 type Props = {
   image: string;
   onConfirm: (croppedDataUrl: string) => void;
@@ -24,121 +26,113 @@ export default function ManualCardAdjuster({
   const imageRef = useRef<HTMLImageElement | null>(null);
 
   const [crop, setCrop] = useState<CropRect>({
-    x: 15,
-    y: 10,
-    width: 70,
-    height: 70 * (7 / 5),
+    x: 18,
+    y: 12,
+    width: 64,
+    height: 76,
   });
 
-  const [dragging, setDragging] = useState(false);
-  const [resizing, setResizing] = useState(false);
-  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [dragMode, setDragMode] = useState<DragMode>(null);
+
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const cropStartRef = useRef<CropRect | null>(null);
 
   useEffect(() => {
-    const initialWidth = 60;
-    const initialHeight = initialWidth * (7 / 5);
-
     setCrop({
-      x: 20,
-      y: 8,
-      width: initialWidth,
-      height: initialHeight,
+      x: 18,
+      y: 12,
+      width: 64,
+      height: 76,
     });
   }, [image]);
 
-  const clampCrop = (next: CropRect): CropRect => {
-    const maxX = 100 - next.width;
-    const maxY = 100 - next.height;
+  const clamp = (value: number, min: number, max: number) =>
+    Math.max(min, Math.min(value, max));
 
-    return {
-      ...next,
-      x: Math.max(0, Math.min(next.x, maxX)),
-      y: Math.max(0, Math.min(next.y, maxY)),
-    };
-  };
-
-  const handlePointerDownMove = (clientX: number, clientY: number) => {
-    setDragging(true);
-    dragStartRef.current = { x: clientX, y: clientY };
-    cropStartRef.current = crop;
-  };
-
-  const handlePointerDownResize = (clientX: number, clientY: number) => {
-    setResizing(true);
-    dragStartRef.current = { x: clientX, y: clientY };
-    cropStartRef.current = crop;
+  const startDrag = (mode: DragMode, clientX: number, clientY: number) => {
+    setDragMode(mode);
+    pointerStartRef.current = { x: clientX, y: clientY };
+    cropStartRef.current = { ...crop };
   };
 
   const handlePointerMove = (clientX: number, clientY: number) => {
-    if (!dragStartRef.current || !cropStartRef.current) return;
-
-    const dx = clientX - dragStartRef.current.x;
-    const dy = clientY - dragStartRef.current.y;
+    if (!dragMode || !pointerStartRef.current || !cropStartRef.current) return;
 
     const container = containerRef.current;
     if (!container) return;
 
     const rect = container.getBoundingClientRect();
-    const dxPct = (dx / rect.width) * 100;
-    const dyPct = (dy / rect.height) * 100;
+    const dxPct = ((clientX - pointerStartRef.current.x) / rect.width) * 100;
+    const dyPct = ((clientY - pointerStartRef.current.y) / rect.height) * 100;
 
-    if (dragging) {
-      const next = clampCrop({
-        ...cropStartRef.current,
-        x: cropStartRef.current.x + dxPct,
-        y: cropStartRef.current.y + dyPct,
-      });
+    const start = cropStartRef.current;
+    const minWidth = 18;
+    const minHeight = 25;
 
-      setCrop(next);
+    let next: CropRect = { ...start };
+
+    if (dragMode === "move") {
+      next.x = clamp(start.x + dxPct, 0, 100 - start.width);
+      next.y = clamp(start.y + dyPct, 0, 100 - start.height);
     }
 
-    if (resizing) {
-      let nextWidth = cropStartRef.current.width + dxPct;
-      nextWidth = Math.max(30, Math.min(nextWidth, 90));
-
-      let nextHeight = nextWidth * (7 / 5);
-
-      const maxHeightAllowed = 100 - cropStartRef.current.y;
-      if (nextHeight > maxHeightAllowed) {
-        nextHeight = maxHeightAllowed;
-        nextWidth = nextHeight * (5 / 7);
-      }
-
-      const maxWidthAllowed = 100 - cropStartRef.current.x;
-      if (nextWidth > maxWidthAllowed) {
-        nextWidth = maxWidthAllowed;
-        nextHeight = nextWidth * (7 / 5);
-      }
-
-      setCrop({
-        x: cropStartRef.current.x,
-        y: cropStartRef.current.y,
-        width: nextWidth,
-        height: nextHeight,
-      });
+    if (dragMode === "left") {
+      const newX = clamp(start.x + dxPct, 0, start.x + start.width - minWidth);
+      next.x = newX;
+      next.width = start.width + (start.x - newX);
     }
+
+    if (dragMode === "right") {
+      const newWidth = clamp(start.width + dxPct, minWidth, 100 - start.x);
+      next.width = newWidth;
+    }
+
+    if (dragMode === "top") {
+      const newY = clamp(start.y + dyPct, 0, start.y + start.height - minHeight);
+      next.y = newY;
+      next.height = start.height + (start.y - newY);
+    }
+
+    if (dragMode === "bottom") {
+      const newHeight = clamp(start.height + dyPct, minHeight, 100 - start.y);
+      next.height = newHeight;
+    }
+
+    setCrop(next);
   };
 
-  const stopInteraction = () => {
-    setDragging(false);
-    setResizing(false);
-    dragStartRef.current = null;
+  const stopDrag = () => {
+    setDragMode(null);
+    pointerStartRef.current = null;
     cropStartRef.current = null;
   };
 
-  const confirmCrop = async () => {
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    handlePointerMove(e.clientX, e.clientY);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    const t = e.touches[0];
+    if (!t) return;
+    handlePointerMove(t.clientX, t.clientY);
+  };
+
+  const confirmCrop = () => {
     const img = imageRef.current;
     if (!img) return;
 
     const canvas = document.createElement("canvas");
-    const scaleX = img.naturalWidth / img.clientWidth;
-    const scaleY = img.naturalHeight / img.clientHeight;
 
-    const sx = (crop.x / 100) * img.clientWidth * scaleX;
-    const sy = (crop.y / 100) * img.clientHeight * scaleY;
-    const sw = (crop.width / 100) * img.clientWidth * scaleX;
-    const sh = (crop.height / 100) * img.clientHeight * scaleY;
+    const displayedWidth = img.clientWidth;
+    const displayedHeight = img.clientHeight;
+
+    const scaleX = img.naturalWidth / displayedWidth;
+    const scaleY = img.naturalHeight / displayedHeight;
+
+    const sx = (crop.x / 100) * displayedWidth * scaleX;
+    const sy = (crop.y / 100) * displayedHeight * scaleY;
+    const sw = (crop.width / 100) * displayedWidth * scaleX;
+    const sh = (crop.height / 100) * displayedHeight * scaleY;
 
     canvas.width = Math.round(sw);
     canvas.height = Math.round(sh);
@@ -158,71 +152,79 @@ export default function ManualCardAdjuster({
       canvas.height
     );
 
-    const cropped = canvas.toDataURL("image/jpeg", 0.95);
-    onConfirm(cropped);
+    const croppedDataUrl = canvas.toDataURL("image/jpeg", 0.95);
+    onConfirm(croppedDataUrl);
   };
 
   return (
-    <div className="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-4 shadow-sm">
       <div>
         <h3 className="text-lg font-semibold text-white">Adjust Card Frame</h3>
         <p className="text-sm text-slate-300">
-          Drag the green box to fit the card edges. Use the corner handle to resize.
+          Drag each side of the green box to match the card edges exactly. Drag
+          inside the box to move it.
         </p>
       </div>
 
       <div
         ref={containerRef}
         className="relative mx-auto w-full max-w-md overflow-hidden rounded-2xl bg-black touch-none"
-        onMouseMove={(e) => handlePointerMove(e.clientX, e.clientY)}
-        onMouseUp={stopInteraction}
-        onMouseLeave={stopInteraction}
-        onTouchMove={(e) => {
-          const t = e.touches[0];
-          if (t) handlePointerMove(t.clientX, t.clientY);
-        }}
-        onTouchEnd={stopInteraction}
+        onMouseMove={handleMouseMove}
+        onMouseUp={stopDrag}
+        onMouseLeave={stopDrag}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={stopDrag}
       >
         <img
           ref={imageRef}
           src={image}
           alt="Captured card"
-          className="block h-auto w-full"
+          className="block h-auto w-full select-none"
+          draggable={false}
         />
 
         <div
           className="pointer-events-none absolute inset-0"
           style={{
-            boxShadow: "inset 0 0 0 9999px rgba(0,0,0,0.45)",
+            background: `radial-gradient(circle at center, transparent 0, transparent 1px, rgba(0,0,0,0.45) 1px)`,
             clipPath: `polygon(
               0% 0%,
+              100% 0%,
+              100% 100%,
               0% 100%,
-              ${crop.x}% 100%,
+              0% 0%,
+              ${crop.x}% 0%,
               ${crop.x}% ${crop.y}%,
               ${crop.x + crop.width}% ${crop.y}%,
               ${crop.x + crop.width}% ${crop.y + crop.height}%,
               ${crop.x}% ${crop.y + crop.height}%,
-              ${crop.x}% 100%,
-              100% 100%,
-              100% 0%
+              ${crop.x}% ${crop.y}%,
+              ${crop.x}% 0%
             )`,
           }}
         />
 
         <div
-          className="absolute rounded-[18px] border-[3px] border-green-400 shadow-[0_0_12px_rgba(34,197,94,0.7)]"
+          className="absolute border-[3px] border-green-400 shadow-[0_0_12px_rgba(34,197,94,0.7)]"
           style={{
             left: `${crop.x}%`,
             top: `${crop.y}%`,
             width: `${crop.width}%`,
             height: `${crop.height}%`,
-          }}
-          onMouseDown={(e) => handlePointerDownMove(e.clientX, e.clientY)}
-          onTouchStart={(e) => {
-            const t = e.touches[0];
-            if (t) handlePointerDownMove(t.clientX, t.clientY);
+            borderRadius: "18px",
           }}
         >
+          <button
+            type="button"
+            aria-label="Move crop"
+            className="absolute inset-0 cursor-move bg-transparent"
+            onMouseDown={(e) => startDrag("move", e.clientX, e.clientY)}
+            onTouchStart={(e) => {
+              const t = e.touches[0];
+              if (t) startDrag("move", t.clientX, t.clientY);
+            }}
+          />
+
           <div className="absolute -left-1 -top-1 h-6 w-6 rounded-tl-md border-l-4 border-t-4 border-green-400" />
           <div className="absolute -right-1 -top-1 h-6 w-6 rounded-tr-md border-r-4 border-t-4 border-green-400" />
           <div className="absolute -bottom-1 -left-1 h-6 w-6 rounded-bl-md border-b-4 border-l-4 border-green-400" />
@@ -230,17 +232,62 @@ export default function ManualCardAdjuster({
 
           <button
             type="button"
-            className="absolute -bottom-4 -right-4 h-10 w-10 rounded-full border-2 border-white bg-green-500 shadow-lg"
+            aria-label="Adjust left edge"
+            className="absolute left-[-10px] top-1/2 h-16 w-5 -translate-y-1/2 cursor-ew-resize rounded-full border border-white/30 bg-green-500/80"
             onMouseDown={(e) => {
               e.stopPropagation();
-              handlePointerDownResize(e.clientX, e.clientY);
+              startDrag("left", e.clientX, e.clientY);
             }}
             onTouchStart={(e) => {
               e.stopPropagation();
               const t = e.touches[0];
-              if (t) handlePointerDownResize(t.clientX, t.clientY);
+              if (t) startDrag("left", t.clientX, t.clientY);
             }}
-            aria-label="Resize crop"
+          />
+
+          <button
+            type="button"
+            aria-label="Adjust right edge"
+            className="absolute right-[-10px] top-1/2 h-16 w-5 -translate-y-1/2 cursor-ew-resize rounded-full border border-white/30 bg-green-500/80"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              startDrag("right", e.clientX, e.clientY);
+            }}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              const t = e.touches[0];
+              if (t) startDrag("right", t.clientX, t.clientY);
+            }}
+          />
+
+          <button
+            type="button"
+            aria-label="Adjust top edge"
+            className="absolute left-1/2 top-[-10px] h-5 w-16 -translate-x-1/2 cursor-ns-resize rounded-full border border-white/30 bg-green-500/80"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              startDrag("top", e.clientX, e.clientY);
+            }}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              const t = e.touches[0];
+              if (t) startDrag("top", t.clientX, t.clientY);
+            }}
+          />
+
+          <button
+            type="button"
+            aria-label="Adjust bottom edge"
+            className="absolute bottom-[-10px] left-1/2 h-5 w-16 -translate-x-1/2 cursor-ns-resize rounded-full border border-white/30 bg-green-500/80"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              startDrag("bottom", e.clientX, e.clientY);
+            }}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              const t = e.touches[0];
+              if (t) startDrag("bottom", t.clientX, t.clientY);
+            }}
           />
         </div>
       </div>
