@@ -66,7 +66,12 @@ export async function POST(req: NextRequest) {
                 {
                   name: "Price",
                   value: formatPrice(price),
-                  inline: true,
+                  inline: false,
+                },
+                {
+                  name: "Deal Link",
+                  value: `[View Deal](${link})`,
+                  inline: false,
                 },
               ],
               image: imageUrl ? { url: imageUrl } : undefined,
@@ -76,19 +81,6 @@ export async function POST(req: NextRequest) {
                     ? "Bargain Sniper UK • Sneakers"
                     : "Bargain Sniper UK • Deals",
               },
-            },
-          ],
-          components: [
-            {
-              type: 1,
-              components: [
-                {
-                  type: 2,
-                  style: 5,
-                  label: "View Deal",
-                  url: link,
-                },
-              ],
             },
           ],
         });
@@ -102,15 +94,24 @@ export async function POST(req: NextRequest) {
 
     if (postToX) {
       try {
+        if (
+          !process.env.X_APP_KEY ||
+          !process.env.X_APP_SECRET ||
+          !process.env.X_ACCESS_TOKEN ||
+          !process.env.X_ACCESS_SECRET
+        ) {
+          throw new Error("Missing X credentials");
+        }
+
         const client = new TwitterApi({
-          appKey: process.env.X_APP_KEY!,
-          appSecret: process.env.X_APP_SECRET!,
-          accessToken: process.env.X_ACCESS_TOKEN!,
-          accessSecret: process.env.X_ACCESS_SECRET!,
+          appKey: process.env.X_APP_KEY,
+          appSecret: process.env.X_APP_SECRET,
+          accessToken: process.env.X_ACCESS_TOKEN,
+          accessSecret: process.env.X_ACCESS_SECRET,
         });
 
         const tweet = await client.v2.tweet(
-          makeXText(description, price, link)
+          makeXText(description, String(price), link)
         );
 
         results.x = tweet.data;
