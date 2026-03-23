@@ -7,10 +7,7 @@ function formatPrice(price: string | number) {
 }
 
 function cleanTag(tag: string) {
-  return tag
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "")
-    .trim();
+  return tag.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
 }
 
 function makeHashtags(destination: string, description: string) {
@@ -33,7 +30,16 @@ function makeHashtags(destination: string, description: string) {
   for (const word of words) {
     if (
       word.length >= 4 &&
-      !["womens", "mens", "huge", "savings", "with", "from", "just", "only"].includes(word)
+      ![
+        "womens",
+        "mens",
+        "huge",
+        "savings",
+        "with",
+        "from",
+        "just",
+        "only",
+      ].includes(word)
     ) {
       tags.add(word);
     }
@@ -74,7 +80,9 @@ ${hashtags}`.trim();
 👉 ${link}
 
 ${hashtags}`.length + title.length + 4;
+
     const maxDescriptionLength = Math.max(20, 280 - reserved);
+
     const shortDescription =
       description.length > maxDescriptionLength
         ? `${description.slice(0, maxDescriptionLength - 1).trim()}…`
@@ -185,7 +193,9 @@ export async function POST(req: NextRequest) {
           );
           discordForm.append(
             "files[0]",
-            new Blob([uploadedBuffer], { type: uploadedMimeType }),
+            new Blob([new Uint8Array(uploadedBuffer)], {
+              type: uploadedMimeType,
+            }),
             uploadedFilename
           );
 
@@ -270,11 +280,7 @@ export async function POST(req: NextRequest) {
           results.x = tweet.data;
         }
       } catch (err: any) {
-        errors.x =
-          err?.data ||
-          err?.message ||
-          err?.detail ||
-          "X post failed";
+        errors.x = err?.data || err?.message || err?.detail || "X post failed";
       }
     }
 
