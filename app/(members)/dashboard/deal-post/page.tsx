@@ -7,6 +7,7 @@ import {
   ImageIcon,
   Send,
   BadgePoundSterling,
+  Upload,
 } from "lucide-react";
 
 type Destination = "amazon" | "sneakers";
@@ -32,6 +33,7 @@ export default function DealPostPage() {
   const [price, setPrice] = useState("");
   const [link, setLink] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   const [postToDiscord, setPostToDiscord] = useState(true);
   const [postToX, setPostToX] = useState(true);
@@ -40,6 +42,13 @@ export default function DealPostPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<ApiResponse | null>(null);
+
+  const previewImage = useMemo(() => {
+    if (imageFile) {
+      return URL.createObjectURL(imageFile);
+    }
+    return imageUrl;
+  }, [imageFile, imageUrl]);
 
   const previewConfig = useMemo(() => {
     if (destination === "amazon") {
@@ -93,21 +102,23 @@ export default function DealPostPage() {
     setResult(null);
 
     try {
+      const formData = new FormData();
+      formData.append("destination", destination);
+      formData.append("description", description);
+      formData.append("price", price);
+      formData.append("link", link);
+      formData.append("imageUrl", imageUrl);
+      formData.append("postToDiscord", String(postToDiscord));
+      formData.append("postToX", String(postToX));
+      formData.append("postToFacebook", String(postToFacebook));
+
+      if (imageFile) {
+        formData.append("imageFile", imageFile);
+      }
+
       const res = await fetch("/api/post-discord", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          destination,
-          description,
-          price,
-          link,
-          imageUrl,
-          postToDiscord,
-          postToX,
-          postToFacebook,
-        }),
+        body: formData,
       });
 
       const data: ApiResponse = await res.json();
@@ -134,6 +145,7 @@ export default function DealPostPage() {
       setPrice("");
       setLink("");
       setImageUrl("");
+      setImageFile(null);
     } catch {
       setMessage("Something went wrong.");
     } finally {
@@ -155,7 +167,7 @@ export default function DealPostPage() {
             </h1>
             <p className="mt-3 max-w-2xl text-slate-400">
               Create a clean deal post, choose the destination, preview the
-              final style, and send the same deal to Discord, X, and Facebook.
+              final style, and send the same deal to Discord and X.
             </p>
           </div>
         </div>
@@ -185,7 +197,7 @@ export default function DealPostPage() {
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Example: Fever-Tree Premium Ginger Beer 24 Cans just £3.50 (List: £16.20)"
+                placeholder="Example: adidas Women's VL Court Bold Shoes Huge Savings!"
                 rows={4}
                 required
                 className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-400/40"
@@ -202,7 +214,7 @@ export default function DealPostPage() {
                   <input
                     value={price}
                     onChange={(e) => setPrice(e.target.value)}
-                    placeholder="3.50"
+                    placeholder="39.99"
                     required
                     className="w-full bg-transparent px-2 py-3 text-white outline-none placeholder:text-slate-500"
                   />
@@ -241,6 +253,36 @@ export default function DealPostPage() {
               </div>
             </div>
 
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Upload Image From Device <span className="text-slate-500">(optional)</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-white/15 bg-[#030814] px-4 py-4 text-slate-300 hover:border-blue-400/40">
+                <Upload size={18} className="text-slate-400" />
+                <span className="text-sm">
+                  {imageFile ? imageFile.name : "Browse your phone/computer and select an image"}
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null;
+                    setImageFile(file);
+                  }}
+                />
+              </label>
+              {imageFile ? (
+                <button
+                  type="button"
+                  onClick={() => setImageFile(null)}
+                  className="mt-2 text-xs text-red-300 hover:text-red-200"
+                >
+                  Remove uploaded image
+                </button>
+              ) : null}
+            </div>
+
             <div className="rounded-2xl border border-white/10 bg-[#030814] p-4">
               <div className="mb-3 text-sm font-medium text-slate-300">
                 Post Destinations
@@ -267,12 +309,13 @@ export default function DealPostPage() {
                   <span>X / Twitter</span>
                 </label>
 
-                <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200">
+                <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 opacity-60">
                   <input
                     type="checkbox"
                     checked={postToFacebook}
                     onChange={(e) => setPostToFacebook(e.target.checked)}
                     className="h-4 w-4 accent-blue-500"
+                    disabled
                   />
                   <span>Facebook</span>
                 </label>
@@ -369,10 +412,10 @@ export default function DealPostPage() {
               </a>
             </div>
 
-            {imageUrl ? (
+            {previewImage ? (
               <div className="mt-4 overflow-hidden rounded-xl border border-white/10 bg-black/20">
                 <img
-                  src={imageUrl}
+                  src={previewImage}
                   alt="Deal preview"
                   className="h-auto max-h-[320px] w-full object-cover"
                 />

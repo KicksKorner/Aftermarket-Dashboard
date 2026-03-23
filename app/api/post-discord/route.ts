@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import axios from "axios";
 import { TwitterApi } from "twitter-api-v2";
 
 function formatPrice(price: string | number) {
@@ -7,11 +6,93 @@ function formatPrice(price: string | number) {
   return `£${num.toFixed(2)}`;
 }
 
-function makeXText(description: string, price: string, link: string) {
-  let text = `🚨 ${description}\n£${price}\n${link}`;
+function cleanTag(tag: string) {
+  return tag
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
+}
+
+function makeHashtags(destination: string, description: string) {
+  const tags = new Set<string>();
+
+  if (destination === "amazon") {
+    tags.add("amazon");
+    tags.add("deals");
+    tags.add("bargain");
+  }
+
+  if (destination === "sneakers") {
+    tags.add("sneakers");
+    tags.add("trainers");
+    tags.add("deals");
+  }
+
+  const words = description.split(/\s+/).map(cleanTag).filter(Boolean);
+
+  for (const word of words) {
+    if (
+      word.length >= 4 &&
+      !["womens", "mens", "huge", "savings", "with", "from", "just", "only"].includes(word)
+    ) {
+      tags.add(word);
+    }
+
+    if (tags.size >= 6) break;
+  }
+
+  return Array.from(tags)
+    .slice(0, 6)
+    .map((tag) => `#${tag}`)
+    .join(" ");
+}
+
+function makeXText(
+  destination: string,
+  description: string,
+  price: string,
+  link: string
+) {
+  const title = destination === "sneakers" ? "👟 DEAL ALERT" : "📦 DEAL ALERT";
+  const hashtags = makeHashtags(destination, description);
+
+  let text = `${title}
+
+${description}
+
+💷 £${price}
+
+👉 ${link}
+
+${hashtags}`.trim();
 
   if (text.length > 280) {
-    text = text.slice(0, 277) + "...";
+    const reserved = `
+
+💷 £${price}
+
+👉 ${link}
+
+${hashtags}`.length + title.length + 4;
+    const maxDescriptionLength = Math.max(20, 280 - reserved);
+    const shortDescription =
+      description.length > maxDescriptionLength
+        ? `${description.slice(0, maxDescriptionLength - 1).trim()}…`
+        : description;
+
+    text = `${title}
+
+${shortDescription}
+
+💷 £${price}
+
+👉 ${link}
+
+${hashtags}`.trim();
+  }
+
+  if (text.length > 280) {
+    text = text.slice(0, 279);
   }
 
   return text;
@@ -19,24 +100,34 @@ function makeXText(description: string, price: string, link: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const formData = await req.formData();
 
-    const {
-      destination = "amazon",
-      description,
-      price,
-      link,
-      imageUrl,
-      postToDiscord = true,
-      postToX = true,
-      postToFacebook = false,
-    } = body;
+    const destination = String(formData.get("destination") || "amazon");
+    const description = String(formData.get("description") || "");
+    const price = String(formData.get("price") || "");
+    const link = String(formData.get("link") || "");
+    const imageUrl = String(formData.get("imageUrl") || "");
+    const postToDiscord = String(formData.get("postToDiscord")) === "true";
+    const postToX = String(formData.get("postToX")) === "true";
+    const postToFacebook = String(formData.get("postToFacebook")) === "true";
+    const imageFile = formData.get("imageFile") as File | null;
 
     if (!description || !price || !link) {
       return NextResponse.json(
         { ok: false, error: "Missing required fields" },
         { status: 400 }
       );
+    }
+
+    let uploadedBuffer: Buffer | null = null;
+    let uploadedMimeType = "";
+    let uploadedFilename = "";
+
+    if (imageFile && imageFile.size > 0) {
+      const bytes = await imageFile.arrayBuffer();
+      uploadedBuffer = Buffer.from(bytes);
+      uploadedMimeType = imageFile.type || "image/jpeg";
+      uploadedFilename = imageFile.name || "deal-image.jpg";
     }
 
     const results: Record<string, unknown> = {};
@@ -53,42 +144,84 @@ export async function POST(req: NextRequest) {
           throw new Error("Missing Discord webhook");
         }
 
-        await axios.post(webhook, {
-          embeds: [
+        const title =
+          destination === "sneakers"
+            ? "Percy Bargains Alert 🚨"
+            : "Amazon STEAL! Alert 🚨";
+
+        const footer =
+          destination === "sneakers"
+            ? "Bargain Sniper UK • Sneakers"
+            : "Bargain Sniper UK • Deals";
+
+        const embed: Record<string, unknown> = {
+          title,
+          description,
+          color: destination === "sneakers" ? 5763719 : 3447003,
+          fields: [
             {
-              title:
-                destination === "sneakers"
-                  ? "Percy Bargains Alert 🚨"
-                  : "Amazon STEAL! Alert 🚨",
-              description,
-              color: destination === "sneakers" ? 5763719 : 3447003,
-              fields: [
-                {
-                  name: "Price",
-                  value: formatPrice(price),
-                  inline: false,
-                },
-                {
-                  name: "Deal Link",
-                  value: `[View Deal](${link})`,
-                  inline: false,
-                },
-              ],
-              image: imageUrl ? { url: imageUrl } : undefined,
-              footer: {
-                text:
-                  destination === "sneakers"
-                    ? "Bargain Sniper UK • Sneakers"
-                    : "Bargain Sniper UK • Deals",
-              },
+              name: "Price",
+              value: formatPrice(price),
+              inline: false,
+            },
+            {
+              name: "Deal Link",
+              value: `[View Deal](${link})`,
+              inline: false,
             },
           ],
-        });
+          footer: { text: footer },
+        };
+
+        if (uploadedBuffer) {
+          embed.image = { url: `attachment://${uploadedFilename}` };
+
+          const discordForm = new FormData();
+          discordForm.append(
+            "payload_json",
+            JSON.stringify({
+              embeds: [embed],
+            })
+          );
+          discordForm.append(
+            "files[0]",
+            new Blob([uploadedBuffer], { type: uploadedMimeType }),
+            uploadedFilename
+          );
+
+          const discordResponse = await fetch(webhook, {
+            method: "POST",
+            body: discordForm,
+          });
+
+          if (!discordResponse.ok) {
+            const text = await discordResponse.text();
+            throw new Error(text || "Discord upload failed");
+          }
+        } else {
+          if (imageUrl) {
+            embed.image = { url: imageUrl };
+          }
+
+          const discordResponse = await fetch(webhook, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              embeds: [embed],
+            }),
+          });
+
+          if (!discordResponse.ok) {
+            const text = await discordResponse.text();
+            throw new Error(text || "Discord post failed");
+          }
+        }
 
         results.discord = true;
       } catch (err: any) {
-        errors.discord =
-          err?.response?.data || err?.message || "Discord post failed";
+        errors.discord = err?.message || "Discord post failed";
       }
     }
 
@@ -110,13 +243,38 @@ export async function POST(req: NextRequest) {
           accessSecret: process.env.X_ACCESS_SECRET,
         });
 
-        const tweet = await client.v2.tweet(
-          makeXText(description, String(price), link)
-        );
+        const tweetText = makeXText(destination, description, price, link);
 
-        results.x = tweet.data;
+        if (uploadedBuffer) {
+          const mediaId = await client.v1.uploadMedia(uploadedBuffer, {
+            mimeType: uploadedMimeType as
+              | "image/jpeg"
+              | "image/png"
+              | "image/gif"
+              | "image/webp",
+          });
+
+          const tweet = await client.v2.tweet({
+            text: tweetText,
+            media: {
+              media_ids: [mediaId],
+            },
+          });
+
+          results.x = tweet.data;
+        } else {
+          const tweet = await client.v2.tweet({
+            text: tweetText,
+          });
+
+          results.x = tweet.data;
+        }
       } catch (err: any) {
-        errors.x = err?.data || err?.message || "X post failed";
+        errors.x =
+          err?.data ||
+          err?.message ||
+          err?.detail ||
+          "X post failed";
       }
     }
 
@@ -132,7 +290,10 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     return NextResponse.json(
-      { ok: false, error: err?.message || "Server error" },
+      {
+        ok: false,
+        error: err?.message || "Server error",
+      },
       { status: 500 }
     );
   }
