@@ -42,20 +42,21 @@ const WEBHOOK_OPTIONS: { value: WebhookTarget; label: string }[] = [
 
 type ApiResponse = { ok?: boolean; error?: string };
 
-// ─── Discord Embed Preview (reused in sidebar + modal) ───────────────────────
+const MEMBER_ROLE_ID = "726446805667020892";
+
 function DiscordEmbed({
   title, date, time,
   link1Label, link1Url, link2Label, link2Url,
   retail, resell, profit,
   whyFlips, riskRating, returnsInfo,
-  studentDiscount, cashback,
+  discountCode, cashback,
   previewImage,
 }: {
   title: string; date: string; time: string;
   link1Label: string; link1Url: string; link2Label: string; link2Url: string;
   retail: string; resell: string; profit: string;
   whyFlips: string; riskRating: number; returnsInfo: string;
-  studentDiscount: string; cashback: string;
+  discountCode: string; cashback: string;
   previewImage: string;
 }) {
   const profitColor = profit ? "text-emerald-300" : "text-slate-400";
@@ -119,12 +120,12 @@ function DiscordEmbed({
         {returnsInfo && <p className="mt-1 text-slate-200 whitespace-pre-line leading-relaxed">{returnsInfo}</p>}
       </div>
 
-      {(studentDiscount || cashback) && (
+      {(discountCode || cashback) && (
         <>
           <p className="text-slate-600 select-none">──────────────────────</p>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">🎓 STUDENT DISCOUNTS / CASHBACK</p>
-            {studentDiscount && <p className="text-slate-200">🎒 Student: <span className="text-white">{studentDiscount}</span></p>}
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">🎓 DISCOUNTS / CASHBACK</p>
+            {discountCode && <p className="text-slate-200">🏷️ Discount Code: <span className="text-white">{discountCode}</span></p>}
             {cashback && <p className="text-slate-200">💳 Cashback: <span className="text-white">{cashback}</span></p>}
           </div>
         </>
@@ -137,18 +138,15 @@ function DiscordEmbed({
       )}
 
       <p className="text-slate-600 select-none">──────────────────────</p>
+      {/* Member ping preview */}
+      <p className="text-xs font-medium text-indigo-400">@Members (role ping will fire on send)</p>
       <p className="text-xs text-slate-400 font-medium">Aftermarket Arbitrage | 2026</p>
     </div>
   );
 }
 
-// ─── Preview Modal ────────────────────────────────────────────────────────────
 function PreviewModal({
-  selectedLabel,
-  onClose,
-  onConfirm,
-  loading,
-  embedProps,
+  selectedLabel, onClose, onConfirm, loading, embedProps,
 }: {
   selectedLabel: string;
   onClose: () => void;
@@ -158,52 +156,29 @@ function PreviewModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={onClose}
-        aria-label="Close preview"
-      />
-
-      {/* Modal */}
+      <button type="button" className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} aria-label="Close preview" />
       <div className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-[24px] border border-white/10 bg-[#071021] p-6 shadow-[0_40px_100px_rgba(0,0,0,0.6)]">
-        {/* Header */}
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-white">Preview Before Sending</h2>
             <p className="mt-1 text-xs text-slate-400">
-              This is how your alert will appear in <span className="font-medium text-white">{selectedLabel}</span>
+              Sending to <span className="font-medium text-white">{selectedLabel}</span> — members will be pinged
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:text-white transition"
-          >
+          <button type="button" onClick={onClose}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:text-white transition">
             <X size={16} />
           </button>
         </div>
-
-        {/* Embed Preview */}
         <DiscordEmbed {...embedProps} />
-
-        {/* Actions */}
         <div className="mt-5 grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-300 transition hover:bg-white/10"
-          >
+          <button type="button" onClick={onClose}
+            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-300 transition hover:bg-white/10">
             ← Go Back & Edit
           </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={loading}
-            className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
-          >
-            {loading ? "Sending..." : `Confirm & Send`}
+          <button type="button" onClick={onConfirm} disabled={loading}
+            className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50">
+            {loading ? "Sending..." : "Confirm & Send"}
           </button>
         </div>
       </div>
@@ -211,7 +186,6 @@ function PreviewModal({
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function AmaWebhookPage() {
   const [webhookTarget, setWebhookTarget] = useState<WebhookTarget>("kicks-flips");
   const [title, setTitle] = useState("");
@@ -227,13 +201,10 @@ export default function AmaWebhookPage() {
   const [whyFlips, setWhyFlips] = useState("");
   const [riskRating, setRiskRating] = useState(3);
   const [returnsInfo, setReturnsInfo] = useState("");
-  const [studentDiscount, setStudentDiscount] = useState("");
+  const [discountCode, setDiscountCode] = useState("");
   const [cashback, setCashback] = useState("");
-
-  // Image
   const [imageUrl, setImageUrl] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
-
   const [showPreview, setShowPreview] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -251,14 +222,13 @@ export default function AmaWebhookPage() {
     link1Label, link1Url, link2Label, link2Url,
     retail, resell, profit,
     whyFlips, riskRating, returnsInfo,
-    studentDiscount, cashback,
+    discountCode, cashback,
     previewImage,
   };
 
   async function sendWebhook() {
     setLoading(true);
     try {
-      // If image file uploaded, convert to base64 for sending
       let finalImageUrl = imageUrl;
       if (imageFile) {
         finalImageUrl = await new Promise<string>((res, rej) => {
@@ -277,7 +247,7 @@ export default function AmaWebhookPage() {
           link1Label, link1Url, link2Label, link2Url,
           retail, resell, profit,
           whyFlips, riskRating, returnsInfo,
-          studentDiscount, cashback,
+          discountCode, cashback,
           imageUrl: finalImageUrl || undefined,
         }),
       });
@@ -292,12 +262,11 @@ export default function AmaWebhookPage() {
       }
 
       setMessage(`Drop alert sent to ${selectedLabel}! ✅`);
-      // Reset
       setTitle(""); setDate(""); setTime("");
       setLink1Label(""); setLink1Url(""); setLink2Label(""); setLink2Url("");
       setRetail(""); setResell(""); setProfit("");
       setWhyFlips(""); setRiskRating(3); setReturnsInfo("");
-      setStudentDiscount(""); setCashback("");
+      setDiscountCode(""); setCashback("");
       setImageUrl(""); setImageFile(null);
     } catch {
       setMessage("Something went wrong.");
@@ -326,7 +295,6 @@ export default function AmaWebhookPage() {
       )}
 
       <div className="space-y-8">
-        {/* Page Header */}
         <section className="rounded-[30px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.96),rgba(5,10,26,0.92))] p-8 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_30px_80px_rgba(0,0,0,0.35)]">
           <div className="flex items-start gap-4">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-300">
@@ -335,14 +303,13 @@ export default function AmaWebhookPage() {
             <div>
               <h1 className="text-3xl font-semibold tracking-tight">AMA Webhook</h1>
               <p className="mt-3 max-w-2xl text-slate-400">
-                Build a full drop alert, preview exactly how it will look in Discord, then fire it to your chosen channel.
+                Build a full drop alert, preview exactly how it will look in Discord, then fire it to your chosen channel. Members will be pinged automatically.
               </p>
             </div>
           </div>
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          {/* ── FORM ── */}
           <div className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6">
             <form onSubmit={handlePreview} className="grid gap-6">
 
@@ -352,11 +319,8 @@ export default function AmaWebhookPage() {
                   <ChevronDown size={16} className="text-blue-400" />
                   Send To
                 </label>
-                <select
-                  value={webhookTarget}
-                  onChange={e => setWebhookTarget(e.target.value as WebhookTarget)}
-                  className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none focus:border-blue-400/40"
-                >
+                <select value={webhookTarget} onChange={e => setWebhookTarget(e.target.value as WebhookTarget)}
+                  className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none focus:border-blue-400/40">
                   {WEBHOOK_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
@@ -367,11 +331,9 @@ export default function AmaWebhookPage() {
               <FormSection icon={<Calendar size={16} />} label="Drop Info">
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-300">Drop Title</label>
-                  <input
-                    value={title} onChange={e => setTitle(e.target.value)}
+                  <input value={title} onChange={e => setTitle(e.target.value)}
                     placeholder="e.g. Nike Air Max 95 — OG Neon" required
-                    className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-400/40"
-                  />
+                    className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-400/40" />
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
@@ -439,7 +401,7 @@ export default function AmaWebhookPage() {
               {/* Why This Flips */}
               <FormSection icon={<TrendingUp size={16} />} label="Why This Flips">
                 <textarea value={whyFlips} onChange={e => setWhyFlips(e.target.value)} rows={5}
-                  placeholder="Explain why this drop is worth picking up — key details, demand drivers, historical performance..."
+                  placeholder="Explain why this drop is worth picking up..."
                   className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-400/40" />
               </FormSection>
 
@@ -468,12 +430,12 @@ export default function AmaWebhookPage() {
                 </div>
               </FormSection>
 
-              {/* Student Discounts & Cashback */}
-              <FormSection icon={<Tag size={16} />} label="Student Discounts / Cashback">
+              {/* Discounts & Cashback */}
+              <FormSection icon={<Tag size={16} />} label="Discounts / Cashback">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-300">Student Discount</label>
-                    <input value={studentDiscount} onChange={e => setStudentDiscount(e.target.value)} placeholder="e.g. 10% off with UNIDAYS"
+                    <label className="mb-2 block text-sm font-medium text-slate-300">Discount Code</label>
+                    <input value={discountCode} onChange={e => setDiscountCode(e.target.value)} placeholder="e.g. SAVE10"
                       className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-400/40" />
                   </div>
                   <div>
@@ -490,12 +452,10 @@ export default function AmaWebhookPage() {
                   <label className="mb-2 block text-sm font-medium text-slate-300">Image URL</label>
                   <div className="flex items-center rounded-2xl border border-white/10 bg-[#030814] px-4">
                     <ImageIcon size={16} className="shrink-0 text-slate-500" />
-                    <input
-                      value={imageUrl}
+                    <input value={imageUrl}
                       onChange={e => { setImageUrl(e.target.value); if (e.target.value) setImageFile(null); }}
                       placeholder="https://..."
-                      className="w-full bg-transparent px-3 py-3 text-white outline-none placeholder:text-slate-500"
-                    />
+                      className="w-full bg-transparent px-3 py-3 text-white outline-none placeholder:text-slate-500" />
                     {imageUrl && (
                       <button type="button" onClick={() => setImageUrl("")} className="text-slate-500 hover:text-red-300 transition">
                         <X size={14} />
@@ -503,36 +463,28 @@ export default function AmaWebhookPage() {
                     )}
                   </div>
                 </div>
-
                 <div className="flex items-center gap-3 text-xs text-slate-500">
                   <div className="h-px flex-1 bg-white/10" />
                   <span>or upload from device</span>
                   <div className="h-px flex-1 bg-white/10" />
                 </div>
-
                 <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-white/15 bg-[#030814] px-4 py-4 text-slate-300 hover:border-blue-400/40 transition">
                   <Upload size={18} className="shrink-0 text-slate-400" />
                   <span className="text-sm truncate">
                     {imageFile ? imageFile.name : "Browse your phone or computer"}
                   </span>
-                  <input
-                    type="file" accept="image/*" className="hidden"
+                  <input type="file" accept="image/*" className="hidden"
                     onChange={e => {
                       const file = e.target.files?.[0] || null;
                       setImageFile(file);
                       if (file) setImageUrl("");
-                    }}
-                  />
+                    }} />
                 </label>
-
                 {imageFile && (
-                  <button type="button" onClick={() => setImageFile(null)}
-                    className="text-xs text-red-300 hover:text-red-200 transition">
+                  <button type="button" onClick={() => setImageFile(null)} className="text-xs text-red-300 hover:text-red-200 transition">
                     Remove uploaded image
                   </button>
                 )}
-
-                {/* Image preview thumbnail */}
                 {previewImage && (
                   <div className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
                     <img src={previewImage} alt="Preview" className="h-auto max-h-[180px] w-full object-cover" />
@@ -540,7 +492,6 @@ export default function AmaWebhookPage() {
                 )}
               </FormSection>
 
-              {/* Preview & Send button */}
               <button type="submit"
                 className="flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-4 text-base font-medium text-white transition hover:bg-blue-500">
                 <Eye size={18} />
@@ -559,7 +510,7 @@ export default function AmaWebhookPage() {
             </form>
           </div>
 
-          {/* ── LIVE SIDEBAR PREVIEW ── */}
+          {/* Live Preview */}
           <div className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.72),rgba(5,10,26,0.88))] p-6">
             <div className="mb-2 flex items-center gap-2 text-xl font-semibold">
               <Send size={20} className="text-blue-300" />
