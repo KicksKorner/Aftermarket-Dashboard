@@ -18,6 +18,7 @@ import {
   X,
   Send,
   ScanSearch,
+  Webhook,
 } from "lucide-react";
 
 type SidebarProps = {
@@ -43,6 +44,12 @@ const navItems: NavItem[] = [
     href: "/dashboard/deal-post",
     label: "Deal Poster",
     icon: Send,
+    startsWith: true,
+  },
+  {
+    href: "/dashboard/ama-webhook",
+    label: "AMA Webhook",
+    icon: Webhook,
     startsWith: true,
   },
   {
