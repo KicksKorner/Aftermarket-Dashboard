@@ -4,17 +4,17 @@ import { verifyKey } from "discord-interactions";
 export const runtime = "nodejs";
 export const maxDuration = 10;
 
-const DISCORD_PUBLIC_KEY = process.env.DISCORD_PUBLIC_KEY;
-const DISCORD_APP_ID = process.env.DISCORD_APP_ID;
+const DISCORD_PUBLIC_KEY = process.env.DISCORD_PUBLIC_KEY!;
+const DISCORD_APP_ID = process.env.DISCORD_APP_ID!;
 
 function getSupabase() {
   return createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_ANON_KEY
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_ANON_KEY!
   );
 }
 
-async function verifyRequest(request) {
+async function verifyRequest(request: Request) {
   const signature = request.headers.get("x-signature-ed25519");
   const timestamp = request.headers.get("x-signature-timestamp");
   if (!signature || !timestamp) return false;
@@ -26,7 +26,7 @@ async function verifyRequest(request) {
   }
 }
 
-function selectMenu(customId, placeholder, options) {
+function selectMenu(customId: string, placeholder: string, options: { label: string; value: string; description?: string }[]) {
   return {
     type: 1,
     components: [{
@@ -42,8 +42,8 @@ function selectMenu(customId, placeholder, options) {
   };
 }
 
-function resultEmbed(product, setName, storeName) {
-  const fields = [];
+function resultEmbed(product: any, setName: string, storeName: string) {
+  const fields: any[] = [];
   if (product.barcode) fields.push({ name: "Barcode", value: `\`${product.barcode}\``, inline: true });
   if (product.sku) fields.push({ name: "SKU", value: `\`${product.sku}\``, inline: true });
   if (product.notes) fields.push({ name: "Notes", value: product.notes, inline: false });
@@ -59,7 +59,7 @@ function resultEmbed(product, setName, storeName) {
   };
 }
 
-async function editOriginal(token, data) {
+async function editOriginal(token: string, data: any) {
   await fetch(`https://discord.com/api/v10/webhooks/${DISCORD_APP_ID}/${token}/messages/@original`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -67,14 +67,14 @@ async function editOriginal(token, data) {
   });
 }
 
-function json(data, status = 200) {
+function json(data: any, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: { "Content-Type": "application/json" },
   });
 }
 
-export async function POST(request) {
+export async function POST(request: Request) {
   const isValid = await verifyRequest(request);
   if (!isValid) {
     return new Response("Unauthorized", { status: 401 });
@@ -89,37 +89,27 @@ export async function POST(request) {
     return json({ type: 1 });
   }
 
-  // Slash command /pokemonsku — defer then edit
+  // Slash command /pokemonsku
   if (body.type === 2 && body.data.name === "pokemonsku") {
-    // Fire Supabase query in background after responding
-    const responsePromise = json({ type: 5, data: { flags: 64 } });
+    const { data: sets } = await supabase
+      .from("pokemon_sets")
+      .select("id, name")
+      .eq("active", true)
+      .order("release_date", { ascending: false });
 
-    // Use waitUntil pattern — query runs after response sent
-    const queryPromise = (async () => {
-      try {
-        const { data: sets } = await supabase
-          .from("pokemon_sets")
-          .select("id, name")
-          .eq("active", true)
-          .order("release_date", { ascending: false });
+    if (!sets || sets.length === 0) {
+      await editOriginal(token, { content: "No sets found. Ask your server admin to add some!" });
+      return json({ type: 5, data: { flags: 64 } });
+    }
 
-        if (!sets || sets.length === 0) {
-          await editOriginal(token, { content: "No sets found. Ask your server admin to add some!" });
-          return;
-        }
-
-        await editOriginal(token, {
-          content: "**Step 1 of 3** — Select a Pokemon set:",
-          components: [selectMenu("select_set", "Choose a set...", sets.map((s) => ({ label: s.name, value: s.id })))],
-        });
-      } catch (err) {
-        console.error(err);
-        await editOriginal(token, { content: "Something went wrong. Please try again." });
-      }
-    })();
-
-    await Promise.all([queryPromise]);
-    return responsePromise;
+    return json({
+      type: 4,
+      data: {
+        content: "**Step 1 of 3** — Select a Pokemon set:",
+        flags: 64,
+        components: [selectMenu("select_set", "Choose a set...", sets.map((s: any) => ({ label: s.name, value: s.id })))],
+      },
+    });
   }
 
   // Component interactions
@@ -141,16 +131,16 @@ export async function POST(request) {
 
       const seen = new Set();
       const stores = products
-        .map((p) => p.pokemon_stores)
-        .filter((s) => { if (seen.has(s.id)) return false; seen.add(s.id); return true; })
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .map((p: any) => p.pokemon_stores)
+        .filter((s: any) => { if (seen.has(s.id)) return false; seen.add(s.id); return true; })
+        .sort((a: any, b: any) => a.name.localeCompare(b.name));
 
       return json({
         type: 7,
         data: {
           content: "**Step 2 of 3** — Select a store:",
           flags: 64,
-          components: [selectMenu(`select_store__${selected}`, "Choose a store...", stores.map((s) => ({ label: s.name, value: s.id })))],
+          components: [selectMenu(`select_store__${selected}`, "Choose a store...", stores.map((s: any) => ({ label: s.name, value: s.id })))],
         },
       });
     }
@@ -179,7 +169,7 @@ export async function POST(request) {
             selectMenu(
               `select_product__${setId}__${selected}`,
               "Choose a product...",
-              products.map((p) => ({
+              products.map((p: any) => ({
                 label: p.product_type,
                 value: p.id,
                 description: [
