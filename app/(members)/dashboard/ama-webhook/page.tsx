@@ -104,7 +104,6 @@ export default function AmaWebhookPage() {
     e.preventDefault();
     setLoading(true);
     setMessage("");
-    setResult(null);
 
     try {
       const formData = new FormData();
