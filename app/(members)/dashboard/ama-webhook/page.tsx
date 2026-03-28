@@ -210,10 +210,16 @@ export default function AmaWebhookPage() {
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<ApiResponse | null>(null);
 
-  const previewImage = useMemo(() => {
-    if (imageFile) return URL.createObjectURL(imageFile);
-    return imageUrl;
-  }, [imageFile, imageUrl]);
+  const [filePreviewUrl, setFilePreviewUrl] = useState("");
+
+  useMemo(() => {
+    if (!imageFile) { setFilePreviewUrl(""); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => setFilePreviewUrl((e.target?.result as string) ?? "");
+    reader.readAsDataURL(imageFile);
+  }, [imageFile]);
+
+  const previewImage = imageFile ? filePreviewUrl : imageUrl;
 
   const selectedLabel = WEBHOOK_OPTIONS.find(o => o.value === webhookTarget)?.label ?? "";
 
@@ -229,15 +235,8 @@ export default function AmaWebhookPage() {
   async function sendWebhook() {
     setLoading(true);
     try {
-      let finalImageUrl = imageUrl;
-      if (imageFile) {
-        finalImageUrl = await new Promise<string>((res, rej) => {
-          const r = new FileReader();
-          r.onload = () => res(r.result as string);
-          r.onerror = () => rej(new Error("Failed to read file"));
-          r.readAsDataURL(imageFile);
-        });
-      }
+      // reuse the already-read base64 from FileReader (works on mobile)
+      const finalImageUrl = imageFile ? filePreviewUrl : imageUrl;
 
       const res = await fetch("/api/ama-webhook", {
         method: "POST",
