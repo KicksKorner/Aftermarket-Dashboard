@@ -10,13 +10,7 @@ const RISK_LABELS: Record<number, string> = {
   5: "5/5 — Very High 🔴",
 };
 
-const RISK_COLOURS: Record<number, number> = {
-  1: 0x22c55e,
-  2: 0x84cc16,
-  3: 0xeab308,
-  4: 0xf97316,
-  5: 0xef4444,
-};
+
 
 type WebhookTarget = "kicks-flips" | "flips" | "sneakers-clothing";
 
@@ -117,7 +111,7 @@ export async function POST(req: NextRequest) {
 
     const embed: Record<string, unknown> = {
       title: "⚙️  " + title,
-      color: RISK_COLOURS[riskRating as number] ?? 0x3b82f6,
+      color: riskRating === 1 ? 0x22c55e : riskRating === 2 ? 0x84cc16 : riskRating === 3 ? 0xeab308 : riskRating === 4 ? 0xf97316 : 0xef4444,
       fields,
       footer: { text: "Aftermarket Arbitrage | 2026" },
       timestamp: new Date().toISOString(),
