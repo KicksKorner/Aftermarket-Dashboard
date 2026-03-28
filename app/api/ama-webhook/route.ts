@@ -54,6 +54,7 @@ export interface AmaPayload {
   discountCode?: string;
   cashback?: string;
   imageUrl?: string;
+  roi?: string;
 }
 
 function formatDate(dateStr: string): string {
@@ -67,7 +68,7 @@ function buildEmbed(payload: AmaPayload) {
   const {
     title, date, time,
     link1Label, link1Url, link2Label, link2Url,
-    retail, resell, profit,
+    retail, resell, profit, roi,
     whyFlips, riskRating = 3, returnsInfo,
     discountCode, cashback, imageUrl,
   } = payload;
@@ -91,7 +92,7 @@ function buildEmbed(payload: AmaPayload) {
   const pricingLines: string[] = [];
   if (retail)  pricingLines.push(`🏷️  Retail: **${retail}**`);
   if (resell)  pricingLines.push(`📈  Resell: **${resell}**`);
-  if (profit)  pricingLines.push(`✅  Profit: **${profit}** Before Fees Per Unit`);
+  if (profit)  pricingLines.push(`✅  Profit: **${profit}** Before Fees Per Unit${roi ? ` *(${roi} ROI)*` : ""}`);
   if (pricingLines.length) fields.push({ name: "💰  PRICING", value: pricingLines.join("\n") });
 
   fields.push({ name: "\u200B", value: "──────────────────────" });

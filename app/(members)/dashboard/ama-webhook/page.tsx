@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Send,
   Calendar,
@@ -14,6 +14,7 @@ import {
   Upload,
   X,
   Eye,
+  Trash2,
 } from "lucide-react";
 
 const RISK_LABELS: Record<number, string> = {
@@ -47,14 +48,14 @@ const MEMBER_ROLE_ID = "726446805667020892";
 function DiscordEmbed({
   title, date, time,
   link1Label, link1Url, link2Label, link2Url,
-  retail, resell, profit,
+  retail, resell, profit, roi,
   whyFlips, riskRating, returnsInfo,
   discountCode, cashback,
   previewImage,
 }: {
   title: string; date: string; time: string;
   link1Label: string; link1Url: string; link2Label: string; link2Url: string;
-  retail: string; resell: string; profit: string;
+  retail: string; resell: string; profit: string; roi: string;
   whyFlips: string; riskRating: number; returnsInfo: string;
   discountCode: string; cashback: string;
   previewImage: string;
@@ -99,7 +100,7 @@ function DiscordEmbed({
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">💰 PRICING</p>
           {retail && <p className="text-slate-200">🏷️ Retail: <span className="text-white font-medium">{retail}</span></p>}
           {resell && <p className="text-slate-200">📈 Resell: <span className="text-white font-medium">{resell}</span></p>}
-          {profit && <p className="text-slate-200">✅ Profit: <span className={`font-medium ${profitColor}`}>{profit} Before Fees Per Unit</span></p>}
+          {profit && <p className="text-slate-200">✅ Profit: <span className={`font-medium ${profitColor}`}>{profit} Before Fees Per Unit{roi ? <span className="ml-1 text-slate-400">({roi} ROI)</span> : ""}</span></p>}
         </div>
       )}
 
@@ -198,6 +199,7 @@ export default function AmaWebhookPage() {
   const [retail, setRetail] = useState("");
   const [resell, setResell] = useState("");
   const [profit, setProfit] = useState("");
+  const [roi, setRoi] = useState("");
   const [whyFlips, setWhyFlips] = useState("");
   const [riskRating, setRiskRating] = useState(3);
   const [returnsInfo, setReturnsInfo] = useState("");
@@ -210,13 +212,42 @@ export default function AmaWebhookPage() {
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<ApiResponse | null>(null);
 
+  // Auto-calculate profit and ROI when retail or resell changes
+  useEffect(() => {
+    const r = parseFloat(retail.replace(/[^0-9.]/g, ""));
+    const s = parseFloat(resell.replace(/[^0-9.]/g, ""));
+    if (!isNaN(r) && !isNaN(s) && r > 0) {
+      const p = s - r;
+      const roiVal = ((p / r) * 100).toFixed(1);
+      setProfit(`£${p.toFixed(2)}`);
+      setRoi(`${roiVal}%`);
+    } else {
+      setProfit("");
+      setRoi("");
+    }
+  }, [retail, resell]);
+
+  function clearAll() {
+    setTitle(""); setDate(""); setTime("");
+    setLink1Label(""); setLink1Url(""); setLink2Label(""); setLink2Url("");
+    setRetail(""); setResell(""); setProfit(""); setRoi("");
+    setWhyFlips(""); setRiskRating(3); setReturnsInfo("");
+    setDiscountCode(""); setCashback("");
+    setImageUrl(""); setImageFile(null);
+    setMessage("");
+  }
+
   const [filePreviewUrl, setFilePreviewUrl] = useState("");
 
-  useMemo(() => {
+  useEffect(() => {
     if (!imageFile) { setFilePreviewUrl(""); return; }
+    let cancelled = false;
     const reader = new FileReader();
-    reader.onload = (e) => setFilePreviewUrl((e.target?.result as string) ?? "");
+    reader.onload = (e) => {
+      if (!cancelled) setFilePreviewUrl((e.target?.result as string) ?? "");
+    };
     reader.readAsDataURL(imageFile);
+    return () => { cancelled = true; };
   }, [imageFile]);
 
   const previewImage = imageFile ? filePreviewUrl : imageUrl;
@@ -226,7 +257,7 @@ export default function AmaWebhookPage() {
   const embedProps = {
     title, date, time,
     link1Label, link1Url, link2Label, link2Url,
-    retail, resell, profit,
+    retail, resell, profit, roi,
     whyFlips, riskRating, returnsInfo,
     discountCode, cashback,
     previewImage,
@@ -244,7 +275,7 @@ export default function AmaWebhookPage() {
         body: JSON.stringify({
           webhookTarget, title, date, time,
           link1Label, link1Url, link2Label, link2Url,
-          retail, resell, profit,
+          retail, resell, profit, roi,
           whyFlips, riskRating, returnsInfo,
           discountCode, cashback,
           imageUrl: finalImageUrl || undefined,
@@ -261,12 +292,7 @@ export default function AmaWebhookPage() {
       }
 
       setMessage(`Drop alert sent to ${selectedLabel}! ✅`);
-      setTitle(""); setDate(""); setTime("");
-      setLink1Label(""); setLink1Url(""); setLink2Label(""); setLink2Url("");
-      setRetail(""); setResell(""); setProfit("");
-      setWhyFlips(""); setRiskRating(3); setReturnsInfo("");
-      setDiscountCode(""); setCashback("");
-      setImageUrl(""); setImageFile(null);
+      clearAll();
     } catch {
       setMessage("Something went wrong.");
       setShowPreview(false);
@@ -341,7 +367,7 @@ export default function AmaWebhookPage() {
                       className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none focus:border-blue-400/40" />
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-300">Time (GMT)</label>
+                    <label className="mb-2 block text-sm font-medium text-slate-300">Time (GMT) <span className="text-slate-500">(optional)</span></label>
                     <input type="time" value={time} onChange={e => setTime(e.target.value)}
                       className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none focus:border-blue-400/40" />
                   </div>
@@ -378,23 +404,30 @@ export default function AmaWebhookPage() {
 
               {/* Pricing */}
               <FormSection icon={<PoundSterling size={16} />} label="Pricing">
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <label className="mb-2 block text-sm font-medium text-slate-300">Retail Price</label>
-                    <input value={retail} onChange={e => setRetail(e.target.value)} placeholder="e.g. £180"
+                    <input value={retail} onChange={e => setRetail(e.target.value)} placeholder="e.g. 180"
                       className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-400/40" />
                   </div>
                   <div>
                     <label className="mb-2 block text-sm font-medium text-slate-300">Resell Price</label>
-                    <input value={resell} onChange={e => setResell(e.target.value)} placeholder="e.g. £250"
-                      className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-400/40" />
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-300">Profit (Before Fees)</label>
-                    <input value={profit} onChange={e => setProfit(e.target.value)} placeholder="e.g. £70"
+                    <input value={resell} onChange={e => setResell(e.target.value)} placeholder="e.g. 250"
                       className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-400/40" />
                   </div>
                 </div>
+                {/* Auto-calculated profit + ROI display */}
+                {profit && (
+                  <div className="flex items-center gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Auto-calculated</span>
+                    <span className="text-sm font-semibold text-emerald-300">{profit} profit</span>
+                    {roi && (
+                      <span className="ml-auto rounded-full border border-emerald-400/20 bg-emerald-500/20 px-2 py-0.5 text-xs font-bold text-emerald-300">
+                        {roi} ROI
+                      </span>
+                    )}
+                  </div>
+                )}
               </FormSection>
 
               {/* Why This Flips */}
@@ -491,11 +524,18 @@ export default function AmaWebhookPage() {
                 )}
               </FormSection>
 
-              <button type="submit"
-                className="flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-4 text-base font-medium text-white transition hover:bg-blue-500">
-                <Eye size={18} />
-                Preview Before Sending
-              </button>
+              <div className="grid grid-cols-[1fr_auto] gap-3">
+                <button type="submit"
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-4 text-base font-medium text-white transition hover:bg-blue-500">
+                  <Eye size={18} />
+                  Preview Before Sending
+                </button>
+                <button type="button" onClick={clearAll}
+                  className="flex items-center justify-center gap-2 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-4 text-sm font-medium text-red-300 transition hover:bg-red-500/20"
+                  title="Clear all fields">
+                  <Trash2 size={18} />
+                </button>
+              </div>
 
               {message && (
                 <div className={`rounded-2xl border px-4 py-3 text-sm ${
