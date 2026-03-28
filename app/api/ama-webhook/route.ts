@@ -167,17 +167,19 @@ export async function POST(req: NextRequest) {
 
     // Handle image
     if (imageFile && imageFile.size > 0) {
-      const buffer = Buffer.from(await imageFile.arrayBuffer());
-      const filename = imageFile.name || "image.jpg";
-      const { FormData: NodeFormData, Blob } = await import("node:buffer") as any;
-      const fd = new NodeFormData();
-      const imageEmbed = { ...embed };
-      if (imageEmbed.embeds[0]) {
-        (imageEmbed.embeds[0] as any).image = { url: `attachment://${filename}` };
-      }
+      // Send as multipart using native FormData (works on Netlify edge)
+      const fd = new FormData();
+      const imageEmbed = {
+        ...embed,
+        embeds: [{ ...embed.embeds[0], image: { url: `attachment://${imageFile.name}` } }],
+      };
       fd.append("payload_json", JSON.stringify(imageEmbed));
-      fd.append("files[0]", new Blob([buffer], { type: imageFile.type }), filename);
-      await axios.post(webhookUrl, fd, { headers: { "Content-Type": "multipart/form-data" } });
+      fd.append("files[0]", imageFile, imageFile.name);
+      const discordRes = await fetch(webhookUrl, { method: "POST", body: fd });
+      if (!discordRes.ok) {
+        const err = await discordRes.text();
+        return NextResponse.json({ ok: false, error: `Discord error: ${err}` }, { status: 502 });
+      }
     } else if (imageUrlRaw && imageUrlRaw.startsWith("http")) {
       const imageEmbed = { ...embed, embeds: [{ ...embed.embeds[0], image: { url: imageUrlRaw } }] };
       await axios.post(webhookUrl, imageEmbed);

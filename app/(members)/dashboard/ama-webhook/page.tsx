@@ -62,7 +62,6 @@ export default function AmaWebhookPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [result, setResult] = useState<ApiResponse | null>(null);
 
   const previewImage = useMemo(() => {
     if (imageFile) return URL.createObjectURL(imageFile);
@@ -136,7 +135,6 @@ export default function AmaWebhookPage() {
       });
 
       const data: ApiResponse = await res.json();
-      setResult(data);
 
       if (!res.ok || !data.ok) {
         setMessage(data.error || "Failed to send webhook.");
@@ -462,12 +460,6 @@ export default function AmaWebhookPage() {
             {message ? (
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
                 {message}
-              </div>
-            ) : null}
-
-            {result && !result.ok ? (
-              <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                {result.error || "Something went wrong."}
               </div>
             ) : null}
 
