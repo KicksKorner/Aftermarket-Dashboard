@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Send,
   BadgePoundSterling,
@@ -60,13 +60,22 @@ export default function AmaWebhookPage() {
   const [cashback, setCashback] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageFilePreview, setImageFilePreview] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  const previewImage = useMemo(() => {
-    if (imageFile) return URL.createObjectURL(imageFile);
-    return imageUrl;
-  }, [imageFile, imageUrl]);
+  // Mobile-safe file preview using FileReader instead of createObjectURL
+  useEffect(() => {
+    if (!imageFile) {
+      setImageFilePreview("");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => setImageFilePreview((e.target?.result as string) || "");
+    reader.readAsDataURL(imageFile);
+  }, [imageFile]);
+
+  const previewImage = imageFile ? imageFilePreview : imageUrl;
 
   const selectedLabel = useMemo(() => {
     return WEBHOOK_OPTIONS.find((o) => o.value === webhookTarget)?.label ?? "";
@@ -97,6 +106,7 @@ export default function AmaWebhookPage() {
     setCashback("");
     setImageUrl("");
     setImageFile(null);
+    setImageFilePreview("");
     setMessage("");
   }
 
@@ -156,6 +166,7 @@ export default function AmaWebhookPage() {
       setCashback("");
       setImageUrl("");
       setImageFile(null);
+      setImageFilePreview("");
     } catch {
       setMessage("Something went wrong.");
     } finally {
@@ -415,7 +426,7 @@ export default function AmaWebhookPage() {
               {imageFile ? (
                 <button
                   type="button"
-                  onClick={() => setImageFile(null)}
+                  onClick={() => { setImageFile(null); setImageFilePreview(""); }}
                   className="mt-2 text-xs text-red-300 hover:text-red-200"
                 >
                   Remove uploaded image

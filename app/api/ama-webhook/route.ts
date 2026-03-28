@@ -10,8 +10,6 @@ const RISK_LABELS: Record<number, string> = {
   5: "5/5 — Very High 🔴",
 };
 
-
-
 type WebhookTarget = "kicks-flips" | "flips" | "sneakers-clothing";
 
 function getWebhookUrl(target: WebhookTarget): string | undefined {
@@ -37,89 +35,99 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    const {
-      webhookTarget,
-      title,
-      date = "",
-      time = "",
-      link1Label = "",
-      link1Url = "",
-      link2Label = "",
-      link2Url = "",
-      retail = "",
-      resell = "",
-      profit = "",
-      roi = "",
-      whyFlips = "",
-      riskRating: riskRatingRaw = 3,
-      returnsInfo = "",
-      discountCode = "",
-      cashback = "",
-      imageUrl = "",
-    } = body;
-
-    const riskRating = parseInt(String(riskRatingRaw)) || 3;
+    const webhookTarget: WebhookTarget = body.webhookTarget;
+    const title: string = body.title || "";
+    const date: string = body.date || "";
+    const time: string = body.time || "";
+    const link1Label: string = body.link1Label || "";
+    const link1Url: string = body.link1Url || "";
+    const link2Label: string = body.link2Label || "";
+    const link2Url: string = body.link2Url || "";
+    const retail: string = body.retail || "";
+    const resell: string = body.resell || "";
+    const profit: string = body.profit || "";
+    const roi: string = body.roi || "";
+    const whyFlips: string = body.whyFlips || "";
+    const riskRating: number = parseInt(String(body.riskRating)) || 3;
+    const returnsInfo: string = body.returnsInfo || "";
+    const discountCode: string = body.discountCode || "";
+    const cashback: string = body.cashback || "";
+    const imageUrl: string = body.imageUrl || "";
 
     if (!title) {
       return NextResponse.json({ ok: false, error: "title is required" }, { status: 400 });
     }
 
-    const webhookUrl = getWebhookUrl(webhookTarget as WebhookTarget);
+    const webhookUrl = getWebhookUrl(webhookTarget);
     if (!webhookUrl) {
-      return NextResponse.json({ ok: false, error: "Webhook URL not configured for this channel" }, { status: 500 });
+      return NextResponse.json({ ok: false, error: "Webhook URL not configured" }, { status: 500 });
     }
 
-    // Build fields
-    const fields: { name: string; value: string }[] = [];
+    // Build a plain description string — same approach as deal poster
+    const lines: string[] = [];
 
     if (date || time) {
-      const parts: string[] = [];
-      if (date) parts.push(formatDate(date));
-      if (time) parts.push(time + " GMT");
-      fields.push({ name: "🕐  TIME & DATE", value: parts.join(" — ") });
+      lines.push("🕐 **TIME & DATE**");
+      const dateParts: string[] = [];
+      if (date) dateParts.push(formatDate(date));
+      if (time) dateParts.push(time + " GMT");
+      lines.push(dateParts.join(" — "));
+      lines.push("");
     }
 
-    const linkLines: string[] = [];
-    if (link1Label && link1Url) linkLines.push("ℹ️  [" + link1Label + "](" + link1Url + ")");
-    else if (link1Label) linkLines.push("ℹ️  " + link1Label);
-    if (link2Label && link2Url) linkLines.push("📋  [" + link2Label + "](" + link2Url + ")");
-    else if (link2Label) linkLines.push("📋  " + link2Label);
-    if (linkLines.length > 0) fields.push({ name: "🔗  LINKS", value: linkLines.join("\n") });
-
-    const pricingLines: string[] = [];
-    if (retail) pricingLines.push("🏷️  Retail: **" + retail + "**");
-    if (resell) pricingLines.push("📈  Resell: **" + resell + "**");
-    if (profit) pricingLines.push("✅  Profit: **" + profit + "** Before Fees Per Unit" + (roi ? " *(" + roi + " ROI)*" : ""));
-    if (pricingLines.length > 0) fields.push({ name: "💰  PRICING", value: pricingLines.join("\n") });
-
-    fields.push({ name: "\u200B", value: "──────────────────────" });
-    if (whyFlips) fields.push({ name: "📊  WHY THIS FLIPS", value: whyFlips });
-    fields.push({ name: "\u200B", value: "──────────────────────" });
-
-    const riskValue = returnsInfo
-      ? "Risk Rating: **" + RISK_LABELS[riskRating] + "**\n\n" + returnsInfo
-      : "Risk Rating: **" + RISK_LABELS[riskRating] + "**";
-    fields.push({ name: "⚠️  RISK & RETURNS", value: riskValue });
-
-    const discountLines: string[] = [];
-    if (discountCode) discountLines.push("🏷️  Discount Code: " + discountCode);
-    if (cashback) discountLines.push("💳  Cashback: " + cashback);
-    if (discountLines.length > 0) {
-      fields.push({ name: "\u200B", value: "──────────────────────" });
-      fields.push({ name: "🎓  DISCOUNTS / CASHBACK", value: discountLines.join("\n") });
+    if (link1Label || link2Label) {
+      lines.push("🔗 **LINKS**");
+      if (link1Label && link1Url) lines.push("ℹ️ [" + link1Label + "](" + link1Url + ")");
+      else if (link1Label) lines.push("ℹ️ " + link1Label);
+      if (link2Label && link2Url) lines.push("📋 [" + link2Label + "](" + link2Url + ")");
+      else if (link2Label) lines.push("📋 " + link2Label);
+      lines.push("");
     }
 
-    const embed: Record<string, unknown> = {
+    if (retail || resell || profit) {
+      lines.push("💰 **PRICING**");
+      if (retail) lines.push("🏷️ Retail: **" + retail + "**");
+      if (resell) lines.push("📈 Resell: **" + resell + "**");
+      if (profit) lines.push("✅ Profit: **" + profit + "** Before Fees" + (roi ? " (" + roi + " ROI)" : ""));
+      lines.push("");
+    }
+
+    if (whyFlips) {
+      lines.push("──────────────────────");
+      lines.push("📊 **WHY THIS FLIPS**");
+      lines.push(whyFlips);
+      lines.push("");
+    }
+
+    lines.push("──────────────────────");
+    lines.push("⚠️ **RISK & RETURNS**");
+    lines.push("Risk Rating: **" + (RISK_LABELS[riskRating] || "3/5 — Medium 🟡") + "**");
+    if (returnsInfo) lines.push(returnsInfo);
+
+    if (discountCode || cashback) {
+      lines.push("");
+      lines.push("──────────────────────");
+      lines.push("🎓 **DISCOUNTS / CASHBACK**");
+      if (discountCode) lines.push("🏷️ Discount Code: " + discountCode);
+      if (cashback) lines.push("💳 Cashback: " + cashback);
+    }
+
+    const description = lines.join("\n");
+
+    const embedColor = riskRating === 1 ? 3196734
+      : riskRating === 2 ? 8704934
+      : riskRating === 3 ? 15381256
+      : riskRating === 4 ? 16349974
+      : 15673924;
+
+    const embed = {
       title: "⚙️  " + title,
-      color: riskRating === 1 ? 0x22c55e : riskRating === 2 ? 0x84cc16 : riskRating === 3 ? 0xeab308 : riskRating === 4 ? 0xf97316 : 0xef4444,
-      fields,
+      description: description,
+      color: embedColor,
       footer: { text: "Aftermarket Arbitrage | 2026" },
       timestamp: new Date().toISOString(),
+      ...(imageUrl && imageUrl.startsWith("http") ? { image: { url: imageUrl } } : {}),
     };
-
-    if (imageUrl && imageUrl.startsWith("http")) {
-      embed.image = { url: imageUrl };
-    }
 
     const payload = {
       content: "<@&" + MEMBER_ROLE_ID + ">",
@@ -137,7 +145,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Discord error: " + errText }, { status: 502 });
     }
 
-    // Save reminder (non-blocking)
+    // Save reminder non-blocking
     if (date && time) {
       try {
         const { createClient } = await import("@supabase/supabase-js");
@@ -163,8 +171,8 @@ export async function POST(req: NextRequest) {
             sent: false,
           });
         }
-      } catch (reminderErr) {
-        console.error("Reminder save failed (non-fatal):", reminderErr);
+      } catch (err) {
+        console.error("Reminder failed:", err);
       }
     }
 
