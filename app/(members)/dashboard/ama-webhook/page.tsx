@@ -98,7 +98,6 @@ export default function AmaWebhookPage() {
     setImageUrl("");
     setImageFile(null);
     setMessage("");
-    setResult(null);
   }
 
   async function handleSubmit(e: React.FormEvent) {
