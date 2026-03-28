@@ -2,27 +2,15 @@
 
 import { useEffect, useState } from "react";
 import {
-  Send,
-  Calendar,
-  PoundSterling,
-  TrendingUp,
-  AlertTriangle,
-  Tag,
-  Link as LinkIcon,
-  ChevronDown,
-  ImageIcon,
-  Upload,
-  X,
-  Eye,
-  Trash2,
+  Send, Calendar, PoundSterling, TrendingUp,
+  AlertTriangle, Tag, Link as LinkIcon, ChevronDown,
+  ImageIcon, Upload, X, Eye, Trash2,
 } from "lucide-react";
 
+// ── Constants ────────────────────────────────────────────────────────────────
+
 const RISK_LABELS: Record<number, string> = {
-  1: "Very Low ✅",
-  2: "Low 🟢",
-  3: "Medium 🟡",
-  4: "High 🟠",
-  5: "Very High 🔴",
+  1: "Very Low ✅", 2: "Low 🟢", 3: "Medium 🟡", 4: "High 🟠", 5: "Very High 🔴",
 };
 
 const RISK_COLORS: Record<number, string> = {
@@ -43,117 +31,117 @@ const WEBHOOK_OPTIONS: { value: WebhookTarget; label: string }[] = [
 
 type ApiResponse = { ok?: boolean; error?: string };
 
-const MEMBER_ROLE_ID = "726446805667020892";
+// ── Helper ───────────────────────────────────────────────────────────────────
 
-function DiscordEmbed({
-  title, date, time,
-  link1Label, link1Url, link2Label, link2Url,
-  retail, resell, profit, roi,
-  whyFlips, riskRating, returnsInfo,
-  discountCode, cashback,
-  previewImage,
-}: {
+function parsePrice(val: string): number {
+  return parseFloat(val.replace(/[^0-9.]/g, "")) || 0;
+}
+
+function formatGBP(n: number): string {
+  return `£${n.toFixed(2)}`;
+}
+
+// ── Discord Embed Preview ────────────────────────────────────────────────────
+
+interface EmbedProps {
   title: string; date: string; time: string;
-  link1Label: string; link1Url: string; link2Label: string; link2Url: string;
+  link1Label: string; link1Url: string;
+  link2Label: string; link2Url: string;
   retail: string; resell: string; profit: string; roi: string;
   whyFlips: string; riskRating: number; returnsInfo: string;
   discountCode: string; cashback: string;
   previewImage: string;
-}) {
-  const profitColor = profit ? "text-emerald-300" : "text-slate-400";
+}
+
+function DiscordEmbed(p: EmbedProps) {
+  const riskColorClass = RISK_COLORS[p.riskRating]?.split(" ")[0] ?? "text-slate-300";
 
   return (
     <div className="rounded-2xl border-l-4 border-blue-500 bg-[#2b2d31] p-5 shadow-[0_20px_50px_rgba(0,0,0,0.35)] space-y-4 text-sm">
       <p className="font-bold text-white text-base leading-snug">
-        ⚙️ {title || "Drop Title Will Appear Here"}
+        ⚙️ {p.title || "Drop Title Will Appear Here"}
       </p>
 
-      {(date || time) && (
+      {(p.date || p.time) && (
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">🕐 TIME & DATE</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">🕐 TIME &amp; DATE</p>
           <p className="text-slate-200">
-            {date ? new Date(date + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }) : ""}
-            {date && time ? " — " : ""}
-            {time ? `${time} GMT` : ""}
+            {p.date ? new Date(p.date + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }) : ""}
+            {p.date && p.time ? " — " : ""}
+            {p.time ? p.time + " GMT" : ""}
           </p>
         </div>
       )}
 
-      {(link1Label || link2Label) && (
+      {(p.link1Label || p.link2Label) && (
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">🔗 LINKS</p>
-          {link1Label && (
-            <p className="text-blue-400">
-              ℹ️ {link1Url ? <a href={link1Url} target="_blank" rel="noreferrer" className="underline underline-offset-2">{link1Label}</a> : link1Label}
-            </p>
-          )}
-          {link2Label && (
-            <p className="text-blue-400">
-              📋 {link2Url ? <a href={link2Url} target="_blank" rel="noreferrer" className="underline underline-offset-2">{link2Label}</a> : link2Label}
-            </p>
-          )}
+          {p.link1Label && <p className="text-blue-400">ℹ️ {p.link1Label}</p>}
+          {p.link2Label && <p className="text-blue-400">📋 {p.link2Label}</p>}
         </div>
       )}
 
-      {(retail || resell || profit) && (
+      {(p.retail || p.resell || p.profit) && (
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">💰 PRICING</p>
-          {retail && <p className="text-slate-200">🏷️ Retail: <span className="text-white font-medium">{retail}</span></p>}
-          {resell && <p className="text-slate-200">📈 Resell: <span className="text-white font-medium">{resell}</span></p>}
-          {profit && <p className="text-slate-200">✅ Profit: <span className={`font-medium ${profitColor}`}>{profit} Before Fees Per Unit{roi ? <span className="ml-1 text-slate-400">({roi} ROI)</span> : ""}</span></p>}
+          {p.retail && <p className="text-slate-200">🏷️ Retail: <span className="text-white font-medium">{p.retail}</span></p>}
+          {p.resell && <p className="text-slate-200">📈 Resell: <span className="text-white font-medium">{p.resell}</span></p>}
+          {p.profit && (
+            <p className="text-slate-200">
+              ✅ Profit: <span className="font-medium text-emerald-300">{p.profit} Before Fees Per Unit</span>
+              {p.roi ? <span className="ml-2 text-slate-400 text-xs">({p.roi} ROI)</span> : null}
+            </p>
+          )}
         </div>
       )}
 
-      {whyFlips && <p className="text-slate-600 select-none">──────────────────────</p>}
-      {whyFlips && (
+      {p.whyFlips ? <p className="text-slate-600 select-none">──────────────────────</p> : null}
+      {p.whyFlips && (
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">📊 WHY THIS FLIPS</p>
-          <p className="text-slate-200 whitespace-pre-line leading-relaxed">{whyFlips}</p>
+          <p className="text-slate-200 whitespace-pre-line leading-relaxed">{p.whyFlips}</p>
         </div>
       )}
 
       <p className="text-slate-600 select-none">──────────────────────</p>
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">⚠️ RISK & RETURNS</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">⚠️ RISK &amp; RETURNS</p>
         <p className="text-slate-200">
-          Risk Rating: <span className={`font-semibold ${RISK_COLORS[riskRating].split(" ")[0]}`}>{riskRating}/5 — {RISK_LABELS[riskRating]}</span>
+          Risk Rating: <span className={"font-semibold " + riskColorClass}>{p.riskRating}/5 — {RISK_LABELS[p.riskRating]}</span>
         </p>
-        {returnsInfo && <p className="mt-1 text-slate-200 whitespace-pre-line leading-relaxed">{returnsInfo}</p>}
+        {p.returnsInfo && <p className="mt-1 text-slate-200 whitespace-pre-line leading-relaxed">{p.returnsInfo}</p>}
       </div>
 
-      {(discountCode || cashback) && (
-        <>
+      {(p.discountCode || p.cashback) && (
+        <div>
           <p className="text-slate-600 select-none">──────────────────────</p>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">🎓 DISCOUNTS / CASHBACK</p>
-            {discountCode && <p className="text-slate-200">🏷️ Discount Code: <span className="text-white">{discountCode}</span></p>}
-            {cashback && <p className="text-slate-200">💳 Cashback: <span className="text-white">{cashback}</span></p>}
-          </div>
-        </>
-      )}
-
-      {previewImage && (
-        <div className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
-          <img src={previewImage} alt="Drop preview" className="h-auto max-h-[280px] w-full object-cover" />
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1 mt-4">🎓 DISCOUNTS / CASHBACK</p>
+          {p.discountCode && <p className="text-slate-200">🏷️ Discount Code: <span className="text-white">{p.discountCode}</span></p>}
+          {p.cashback && <p className="text-slate-200">💳 Cashback: <span className="text-white">{p.cashback}</span></p>}
         </div>
       )}
 
+      {p.previewImage ? (
+        <div className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
+          <img src={p.previewImage} alt="Drop preview" className="h-auto max-h-[280px] w-full object-cover" />
+        </div>
+      ) : null}
+
       <p className="text-slate-600 select-none">──────────────────────</p>
-      {/* Member ping preview */}
       <p className="text-xs font-medium text-indigo-400">@Members (role ping will fire on send)</p>
       <p className="text-xs text-slate-400 font-medium">Aftermarket Arbitrage | 2026</p>
     </div>
   );
 }
 
-function PreviewModal({
-  selectedLabel, onClose, onConfirm, loading, embedProps,
-}: {
+// ── Preview Modal ────────────────────────────────────────────────────────────
+
+function PreviewModal({ selectedLabel, onClose, onConfirm, loading, embedProps }: {
   selectedLabel: string;
   onClose: () => void;
   onConfirm: () => void;
   loading: boolean;
-  embedProps: React.ComponentProps<typeof DiscordEmbed>;
+  embedProps: EmbedProps;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -175,7 +163,7 @@ function PreviewModal({
         <div className="mt-5 grid grid-cols-2 gap-3">
           <button type="button" onClick={onClose}
             className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-300 transition hover:bg-white/10">
-            ← Go Back & Edit
+            ← Go Back &amp; Edit
           </button>
           <button type="button" onClick={onConfirm} disabled={loading}
             className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50">
@@ -186,6 +174,22 @@ function PreviewModal({
     </div>
   );
 }
+
+// ── Form Section Helper ──────────────────────────────────────────────────────
+
+function FormSection({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#030814] p-5 space-y-4">
+      <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+        <span className="text-blue-400">{icon}</span>
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AmaWebhookPage() {
   const [webhookTarget, setWebhookTarget] = useState<WebhookTarget>("kicks-flips");
@@ -207,38 +211,26 @@ export default function AmaWebhookPage() {
   const [cashback, setCashback] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [filePreviewUrl, setFilePreviewUrl] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [result, setResult] = useState<ApiResponse | null>(null);
 
-  // Auto-calculate profit and ROI when retail or resell changes
+  // Auto-calculate profit + ROI
   useEffect(() => {
-    const r = parseFloat(retail.replace(/[^0-9.]/g, ""));
-    const s = parseFloat(resell.replace(/[^0-9.]/g, ""));
-    if (!isNaN(r) && !isNaN(s) && r > 0) {
+    const r = parsePrice(retail);
+    const s = parsePrice(resell);
+    if (r > 0 && s > 0) {
       const p = s - r;
-      const roiVal = ((p / r) * 100).toFixed(1);
-      setProfit(`£${p.toFixed(2)}`);
-      setRoi(`${roiVal}%`);
+      setProfit(formatGBP(p));
+      setRoi(((p / r) * 100).toFixed(1) + "%");
     } else {
       setProfit("");
       setRoi("");
     }
   }, [retail, resell]);
 
-  function clearAll() {
-    setTitle(""); setDate(""); setTime("");
-    setLink1Label(""); setLink1Url(""); setLink2Label(""); setLink2Url("");
-    setRetail(""); setResell(""); setProfit(""); setRoi("");
-    setWhyFlips(""); setRiskRating(3); setReturnsInfo("");
-    setDiscountCode(""); setCashback("");
-    setImageUrl(""); setImageFile(null);
-    setMessage("");
-  }
-
-  const [filePreviewUrl, setFilePreviewUrl] = useState("");
-
+  // FileReader for image preview (mobile safe)
   useEffect(() => {
     if (!imageFile) { setFilePreviewUrl(""); return; }
     let cancelled = false;
@@ -251,13 +243,24 @@ export default function AmaWebhookPage() {
   }, [imageFile]);
 
   const previewImage = imageFile ? filePreviewUrl : imageUrl;
-
   const selectedLabel = WEBHOOK_OPTIONS.find(o => o.value === webhookTarget)?.label ?? "";
 
-  const embedProps = {
+  function clearAll() {
+    setTitle(""); setDate(""); setTime("");
+    setLink1Label(""); setLink1Url(""); setLink2Label(""); setLink2Url("");
+    setRetail(""); setResell(""); setProfit(""); setRoi("");
+    setWhyFlips(""); setRiskRating(3); setReturnsInfo("");
+    setDiscountCode(""); setCashback("");
+    setImageUrl(""); setImageFile(null); setFilePreviewUrl("");
+    setMessage("");
+  }
+
+  const embedProps: EmbedProps = {
     title, date, time,
     link1Label, link1Url, link2Label, link2Url,
-    retail, resell, profit, roi,
+    retail: retail ? formatGBP(parsePrice(retail)) : "",
+    resell: resell ? formatGBP(parsePrice(resell)) : "",
+    profit, roi,
     whyFlips, riskRating, returnsInfo,
     discountCode, cashback,
     previewImage,
@@ -266,7 +269,6 @@ export default function AmaWebhookPage() {
   async function sendWebhook() {
     setLoading(true);
     try {
-      // reuse the already-read base64 from FileReader (works on mobile)
       const finalImageUrl = imageFile ? filePreviewUrl : imageUrl;
 
       const res = await fetch("/api/ama-webhook", {
@@ -275,15 +277,18 @@ export default function AmaWebhookPage() {
         body: JSON.stringify({
           webhookTarget, title, date, time,
           link1Label, link1Url, link2Label, link2Url,
-          retail, resell, profit, roi,
+          retail: retail ? formatGBP(parsePrice(retail)) : "",
+          resell: resell ? formatGBP(parsePrice(resell)) : "",
+          profit, roi,
           whyFlips, riskRating, returnsInfo,
           discountCode, cashback,
           imageUrl: finalImageUrl || undefined,
         }),
       });
 
-      const data: ApiResponse = await res.json();
-      setResult(data);
+      let data: ApiResponse = {};
+      try { data = await res.json(); } catch { data = { ok: false, error: "Invalid response from server" }; }
+
       setShowPreview(false);
 
       if (!res.ok || !data.ok) {
@@ -291,10 +296,10 @@ export default function AmaWebhookPage() {
         return;
       }
 
-      setMessage(`Drop alert sent to ${selectedLabel}! ✅`);
+      setMessage("Drop alert sent to " + selectedLabel + "! ✅");
       clearAll();
-    } catch {
-      setMessage("Something went wrong.");
+    } catch (err) {
+      setMessage("Something went wrong. Please try again.");
       setShowPreview(false);
     } finally {
       setLoading(false);
@@ -320,6 +325,7 @@ export default function AmaWebhookPage() {
       )}
 
       <div className="space-y-8">
+        {/* Header */}
         <section className="rounded-[30px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.96),rgba(5,10,26,0.92))] p-8 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_30px_80px_rgba(0,0,0,0.35)]">
           <div className="flex items-start gap-4">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-300">
@@ -328,17 +334,18 @@ export default function AmaWebhookPage() {
             <div>
               <h1 className="text-3xl font-semibold tracking-tight">AMA Webhook</h1>
               <p className="mt-3 max-w-2xl text-slate-400">
-                Build a full drop alert, preview exactly how it will look in Discord, then fire it to your chosen channel. Members will be pinged automatically.
+                Build a drop alert, preview it, then fire it to your chosen Discord channel. Members will be pinged automatically.
               </p>
             </div>
           </div>
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          {/* Form */}
           <div className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6">
             <form onSubmit={handlePreview} className="grid gap-6">
 
-              {/* Webhook Destination */}
+              {/* Send To */}
               <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5">
                 <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-200">
                   <ChevronDown size={16} className="text-blue-400" />
@@ -367,7 +374,9 @@ export default function AmaWebhookPage() {
                       className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none focus:border-blue-400/40" />
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-300">Time (GMT) <span className="text-slate-500">(optional)</span></label>
+                    <label className="mb-2 block text-sm font-medium text-slate-300">
+                      Time (GMT) <span className="text-slate-500">(optional)</span>
+                    </label>
                     <input type="time" value={time} onChange={e => setTime(e.target.value)}
                       className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none focus:border-blue-400/40" />
                   </div>
@@ -390,12 +399,16 @@ export default function AmaWebhookPage() {
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-300">Link 2 Label <span className="text-slate-500">(optional)</span></label>
+                    <label className="mb-2 block text-sm font-medium text-slate-300">
+                      Link 2 Label <span className="text-slate-500">(optional)</span>
+                    </label>
                     <input value={link2Label} onChange={e => setLink2Label(e.target.value)} placeholder="e.g. Checklist PDF"
                       className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-400/40" />
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-300">Link 2 URL <span className="text-slate-500">(optional)</span></label>
+                    <label className="mb-2 block text-sm font-medium text-slate-300">
+                      Link 2 URL <span className="text-slate-500">(optional)</span>
+                    </label>
                     <input value={link2Url} onChange={e => setLink2Url(e.target.value)} placeholder="https://..."
                       className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-400/40" />
                   </div>
@@ -416,7 +429,6 @@ export default function AmaWebhookPage() {
                       className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-400/40" />
                   </div>
                 </div>
-                {/* Auto-calculated profit + ROI display */}
                 {profit && (
                   <div className="flex items-center gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3">
                     <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Auto-calculated</span>
@@ -441,14 +453,17 @@ export default function AmaWebhookPage() {
               <FormSection icon={<AlertTriangle size={16} />} label="Risk & Returns">
                 <div>
                   <label className="mb-3 block text-sm font-medium text-slate-300">
-                    Risk Rating — <span className={`font-semibold ${RISK_COLORS[riskRating].split(" ")[0]}`}>{RISK_LABELS[riskRating]}</span>
+                    Risk Rating —{" "}
+                    <span className={"font-semibold " + (RISK_COLORS[riskRating]?.split(" ")[0] ?? "")}>
+                      {RISK_LABELS[riskRating]}
+                    </span>
                   </label>
                   <div className="flex gap-2">
                     {[1, 2, 3, 4, 5].map(n => (
                       <button key={n} type="button" onClick={() => setRiskRating(n)}
-                        className={`flex-1 rounded-xl border py-2 text-sm font-semibold transition ${
-                          riskRating === n ? `${RISK_COLORS[n]} border-current` : "border-white/10 bg-white/5 text-slate-400 hover:border-white/20"
-                        }`}>
+                        className={"flex-1 rounded-xl border py-2 text-sm font-semibold transition " + (
+                          riskRating === n ? (RISK_COLORS[n] + " border-current") : "border-white/10 bg-white/5 text-slate-400 hover:border-white/20"
+                        )}>
                         {n}
                       </button>
                     ))}
@@ -462,7 +477,7 @@ export default function AmaWebhookPage() {
                 </div>
               </FormSection>
 
-              {/* Discounts & Cashback */}
+              {/* Discounts */}
               <FormSection icon={<Tag size={16} />} label="Discounts / Cashback">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
@@ -502,47 +517,41 @@ export default function AmaWebhookPage() {
                 </div>
                 <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-white/15 bg-[#030814] px-4 py-4 text-slate-300 hover:border-blue-400/40 transition">
                   <Upload size={18} className="shrink-0 text-slate-400" />
-                  <span className="text-sm truncate">
-                    {imageFile ? imageFile.name : "Browse your phone or computer"}
-                  </span>
+                  <span className="text-sm truncate">{imageFile ? imageFile.name : "Browse your phone or computer"}</span>
                   <input type="file" accept="image/*" className="hidden"
-                    onChange={e => {
-                      const file = e.target.files?.[0] || null;
-                      setImageFile(file);
-                      if (file) setImageUrl("");
-                    }} />
+                    onChange={e => { const f = e.target.files?.[0] ?? null; setImageFile(f); if (f) setImageUrl(""); }} />
                 </label>
                 {imageFile && (
                   <button type="button" onClick={() => setImageFile(null)} className="text-xs text-red-300 hover:text-red-200 transition">
                     Remove uploaded image
                   </button>
                 )}
-                {previewImage && (
+                {previewImage ? (
                   <div className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
                     <img src={previewImage} alt="Preview" className="h-auto max-h-[180px] w-full object-cover" />
                   </div>
-                )}
+                ) : null}
               </FormSection>
 
+              {/* Action buttons */}
               <div className="grid grid-cols-[1fr_auto] gap-3">
                 <button type="submit"
                   className="flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-4 text-base font-medium text-white transition hover:bg-blue-500">
                   <Eye size={18} />
                   Preview Before Sending
                 </button>
-                <button type="button" onClick={clearAll}
-                  className="flex items-center justify-center gap-2 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-4 text-sm font-medium text-red-300 transition hover:bg-red-500/20"
-                  title="Clear all fields">
+                <button type="button" onClick={clearAll} title="Clear all fields"
+                  className="flex items-center justify-center gap-2 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-4 text-sm font-medium text-red-300 transition hover:bg-red-500/20">
                   <Trash2 size={18} />
                 </button>
               </div>
 
               {message && (
-                <div className={`rounded-2xl border px-4 py-3 text-sm ${
+                <div className={"rounded-2xl border px-4 py-3 text-sm " + (
                   message.includes("✅")
                     ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-300"
                     : "border-red-400/20 bg-red-500/10 text-red-300"
-                }`}>
+                )}>
                   {message}
                 </div>
               )}
@@ -563,17 +572,5 @@ export default function AmaWebhookPage() {
         </section>
       </div>
     </>
-  );
-}
-
-function FormSection({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-[#030814] p-5 space-y-4">
-      <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-        <span className="text-blue-400">{icon}</span>
-        {label}
-      </div>
-      {children}
-    </div>
   );
 }
