@@ -106,30 +106,29 @@ export default function AmaWebhookPage() {
     setMessage("");
 
     try {
-      const formData = new FormData();
-      formData.append("webhookTarget", webhookTarget);
-      formData.append("title", title);
-      formData.append("date", date);
-      formData.append("time", time);
-      formData.append("link1Label", link1Label);
-      formData.append("link1Url", link1Url);
-      formData.append("link2Label", link2Label);
-      formData.append("link2Url", link2Url);
-      formData.append("retail", retailNum > 0 ? `£${retailNum.toFixed(2)}` : "");
-      formData.append("resell", resellNum > 0 ? `£${resellNum.toFixed(2)}` : "");
-      formData.append("profit", profitStr);
-      formData.append("roi", roiStr);
-      formData.append("whyFlips", whyFlips);
-      formData.append("riskRating", String(riskRating));
-      formData.append("returnsInfo", returnsInfo);
-      formData.append("discountCode", discountCode);
-      formData.append("cashback", cashback);
-      formData.append("imageUrl", imageUrl);
-      if (imageFile) formData.append("imageFile", imageFile);
-
       const res = await fetch("/api/ama-webhook", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          webhookTarget,
+          title,
+          date,
+          time,
+          link1Label,
+          link1Url,
+          link2Label,
+          link2Url,
+          retail: retailNum > 0 ? `£${retailNum.toFixed(2)}` : "",
+          resell: resellNum > 0 ? `£${resellNum.toFixed(2)}` : "",
+          profit: profitStr,
+          roi: roiStr,
+          whyFlips,
+          riskRating,
+          returnsInfo,
+          discountCode,
+          cashback,
+          imageUrl,
+        }),
       });
 
       const data: ApiResponse = await res.json();
@@ -166,7 +165,6 @@ export default function AmaWebhookPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <section className="rounded-[30px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.96),rgba(5,10,26,0.92))] p-8 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_30px_80px_rgba(0,0,0,0.35)]">
         <div className="flex items-start gap-4">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-300">
@@ -182,11 +180,9 @@ export default function AmaWebhookPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        {/* Form */}
         <div className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6">
           <form onSubmit={handleSubmit} className="grid gap-5">
 
-            {/* Send To */}
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-300">Send To</label>
               <select
@@ -200,7 +196,6 @@ export default function AmaWebhookPage() {
               </select>
             </div>
 
-            {/* Drop Title */}
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-300">Drop Title</label>
               <input
@@ -212,7 +207,6 @@ export default function AmaWebhookPage() {
               />
             </div>
 
-            {/* Date & Time */}
             <div className="grid gap-5 md:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">Date</label>
@@ -236,7 +230,6 @@ export default function AmaWebhookPage() {
               </div>
             </div>
 
-            {/* Links */}
             <div className="grid gap-5 md:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">Link 1 Label</label>
@@ -283,7 +276,6 @@ export default function AmaWebhookPage() {
               </div>
             </div>
 
-            {/* Pricing */}
             <div className="grid gap-5 md:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">Retail Price</label>
@@ -317,7 +309,6 @@ export default function AmaWebhookPage() {
               </div>
             ) : null}
 
-            {/* Why This Flips */}
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-300">Why This Flips</label>
               <textarea
@@ -329,7 +320,6 @@ export default function AmaWebhookPage() {
               />
             </div>
 
-            {/* Risk Rating */}
             <div>
               <label className="mb-3 block text-sm font-medium text-slate-300">
                 Risk Rating — <span className="font-semibold">{RISK_LABELS[riskRating]}</span>
@@ -352,7 +342,6 @@ export default function AmaWebhookPage() {
               </div>
             </div>
 
-            {/* Returns Info */}
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-300">Returns Information</label>
               <textarea
@@ -364,7 +353,6 @@ export default function AmaWebhookPage() {
               />
             </div>
 
-            {/* Discount & Cashback */}
             <div className="grid gap-5 md:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">
@@ -390,22 +378,21 @@ export default function AmaWebhookPage() {
               </div>
             </div>
 
-            {/* Image URL */}
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-300">
                 Image URL <span className="text-slate-500">(optional)</span>
               </label>
               <div className="flex items-center rounded-2xl border border-white/10 bg-[#030814] px-4">
+                <ImageIcon size={18} className="text-slate-500" />
                 <input
                   value={imageUrl}
                   onChange={(e) => setImageUrl(e.target.value)}
                   placeholder="https://..."
-                  className="w-full bg-transparent py-3 text-white outline-none placeholder:text-slate-500"
+                  className="w-full bg-transparent px-2 py-3 text-white outline-none placeholder:text-slate-500"
                 />
               </div>
             </div>
 
-            {/* Image Upload */}
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-300">
                 Upload Image From Device <span className="text-slate-500">(optional)</span>
@@ -436,7 +423,6 @@ export default function AmaWebhookPage() {
               ) : null}
             </div>
 
-            {/* Buttons */}
             <div className="grid grid-cols-[1fr_auto] gap-3">
               <button
                 type="submit"
