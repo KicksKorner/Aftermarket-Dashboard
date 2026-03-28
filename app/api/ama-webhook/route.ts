@@ -57,12 +57,14 @@ export async function POST(req: NextRequest) {
       profit = "",
       roi = "",
       whyFlips = "",
-      riskRating = 3,
+      riskRating: riskRatingRaw = 3,
       returnsInfo = "",
       discountCode = "",
       cashback = "",
       imageUrl = "",
     } = body;
+
+    const riskRating = parseInt(String(riskRatingRaw)) || 3;
 
     if (!title) {
       return NextResponse.json({ ok: false, error: "title is required" }, { status: 400 });
@@ -115,7 +117,7 @@ export async function POST(req: NextRequest) {
 
     const embed: Record<string, unknown> = {
       title: "⚙️  " + title,
-      color: RISK_COLOURS[riskRating] || 0x3b82f6,
+      color: RISK_COLOURS[riskRating as number] ?? 0x3b82f6,
       fields,
       footer: { text: "Aftermarket Arbitrage | 2026" },
       timestamp: new Date().toISOString(),
