@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
       imageUrl,
       postToDiscord: sendDiscord = true,
       postToX: sendX = true,
-      postToFacebook: sendFacebook = false,
+      postToFacebook: sendFacebook = true, // ← enabled
     } = body;
 
     if (!description || !price || !dealLink) {

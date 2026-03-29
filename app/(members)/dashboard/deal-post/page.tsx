@@ -37,7 +37,7 @@ export default function DealPostPage() {
 
   const [postToDiscord, setPostToDiscord] = useState(true);
   const [postToX, setPostToX] = useState(true);
-  const [postToFacebook, setPostToFacebook] = useState(false);
+  const [postToFacebook, setPostToFacebook] = useState(true); // ← enabled
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -309,13 +309,13 @@ export default function DealPostPage() {
                   <span>X / Twitter</span>
                 </label>
 
-                <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 opacity-60">
+                {/* ← Facebook: removed disabled and opacity-60 */}
+                <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200">
                   <input
                     type="checkbox"
                     checked={postToFacebook}
                     onChange={(e) => setPostToFacebook(e.target.checked)}
                     className="h-4 w-4 accent-blue-500"
-                    disabled
                   />
                   <span>Facebook</span>
                 </label>
