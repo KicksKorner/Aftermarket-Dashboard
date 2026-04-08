@@ -19,11 +19,13 @@ type ApiResponse = {
     discord?: unknown;
     x?: unknown;
     facebook?: unknown;
+    website?: unknown;
   };
   errors?: {
     discord?: string | object | null;
     x?: string | object | null;
     facebook?: string | object | null;
+    website?: string | object | null;
   };
 };
 
@@ -38,6 +40,7 @@ export default function DealPostPage() {
   const [postToDiscord, setPostToDiscord] = useState(true);
   const [postToX, setPostToX] = useState(true);
   const [postToFacebook, setPostToFacebook] = useState(true); // ← enabled
+  const [postToWebsite, setPostToWebsite] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -111,6 +114,7 @@ export default function DealPostPage() {
       formData.append("postToDiscord", String(postToDiscord));
       formData.append("postToX", String(postToX));
       formData.append("postToFacebook", String(postToFacebook));
+      formData.append("postToWebsite", String(postToWebsite));
 
       if (imageFile) {
         formData.append("imageFile", imageFile);
@@ -288,7 +292,7 @@ export default function DealPostPage() {
                 Post Destinations
               </div>
 
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-4">
                 <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200">
                   <input
                     type="checkbox"
@@ -318,6 +322,16 @@ export default function DealPostPage() {
                     className="h-4 w-4 accent-blue-500"
                   />
                   <span>Facebook</span>
+                </label>
+
+                <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={postToWebsite}
+                    onChange={(e) => setPostToWebsite(e.target.checked)}
+                    className="h-4 w-4 accent-blue-500"
+                  />
+                  <span>Website</span>
                 </label>
               </div>
             </div>
@@ -357,6 +371,11 @@ export default function DealPostPage() {
                     "Facebook",
                     Boolean(result?.results?.facebook),
                     Boolean(result?.errors?.facebook)
+                  )}
+                  {postToWebsite && renderStatus(
+                    "Website",
+                    Boolean(result?.results?.website),
+                    Boolean(result?.errors?.website)
                   )}
                 </div>
 
