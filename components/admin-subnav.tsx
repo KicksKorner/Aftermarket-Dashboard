@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const adminLinks = [
   { href: "/admin", label: "Overview", exact: true },
+  { href: "/admin/members", label: "Members" },
   { href: "/admin/guides", label: "Guides" },
   { href: "/dashboard/deal-post", label: "Deal Poster" },
   { href: "/dashboard/ama-webhook", label: "AMA Webhook" },

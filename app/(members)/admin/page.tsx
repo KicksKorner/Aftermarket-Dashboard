@@ -10,9 +10,7 @@ export default async function AdminOverviewPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect("/login");
-  }
+  if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -20,9 +18,7 @@ export default async function AdminOverviewPage() {
     .eq("id", user.id)
     .single();
 
-  if (profile?.role !== "admin") {
-    redirect("/dashboard");
-  }
+  if (profile?.role !== "admin") redirect("/dashboard");
 
   return (
     <main className="min-h-screen bg-[#030814] px-6 py-8 text-white">
@@ -36,6 +32,16 @@ export default async function AdminOverviewPage() {
         <AdminSubnav />
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <Link
+            href="/admin/members"
+            className="rounded-[24px] border border-emerald-500/20 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-emerald-400/30"
+          >
+            <h2 className="text-xl font-semibold">Members</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              View all members, toggle Premium access and manage roles.
+            </p>
+          </Link>
+
           <Link
             href="/dashboard/deal-post"
             className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-blue-400/30"

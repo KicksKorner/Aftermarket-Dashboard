@@ -15,6 +15,7 @@ import {
   Footprints,
   Menu,
   X,
+  Lock,
 } from "lucide-react";
 
 type SidebarProps = {
@@ -28,6 +29,7 @@ type NavItem = {
   icon: React.ComponentType<{ size?: number; className?: string }>;
   startsWith?: boolean;
   adminOnly?: boolean;
+  premiumLocked?: boolean;
 };
 
 const navItems: NavItem[] = [
@@ -41,10 +43,11 @@ const navItems: NavItem[] = [
     label: "Sole Scan",
     icon: Footprints,
     startsWith: true,
+    premiumLocked: true,
   },
   {
     href: "/dashboard/inventory",
-    label: "Inventory Tracker",
+    label: "AIO Tracker",
     icon: Boxes,
     startsWith: true,
   },
@@ -89,6 +92,10 @@ function SidebarContent({
   const activeItem =
     "border border-white/10 bg-white/10 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)]";
   const inactiveItem = "text-slate-300 hover:bg-white/5 hover:text-white";
+  const lockedItem =
+    "text-slate-500 cursor-pointer hover:bg-white/5";
+
+  const isUnlocked = role === "premium" || role === "admin";
 
   const filteredItems = useMemo(() => {
     return navItems.filter((item) => !item.adminOnly || role === "admin");
@@ -126,6 +133,22 @@ function SidebarContent({
           const isActive = item.startsWith
             ? pathname.startsWith(item.href)
             : pathname === item.href;
+
+          // Sole Scan — locked for member, routes to /upgrade
+          if (item.premiumLocked && !isUnlocked) {
+            return (
+              <Link
+                key={item.href}
+                href="/upgrade"
+                onClick={onNavigate}
+                className={`${baseItem} ${lockedItem}`}
+              >
+                <Icon size={18} />
+                <span className="flex-1">{item.label}</span>
+                <Lock size={13} className="text-slate-600" />
+              </Link>
+            );
+          }
 
           return (
             <Link
@@ -200,7 +223,6 @@ export default function Sidebar({ role, email }: SidebarProps) {
             onClick={() => setOpen(false)}
             aria-label="Close menu overlay"
           />
-
           <aside className="absolute left-0 top-0 h-full w-[86%] max-w-[320px] border-r border-white/10 bg-[#071021] p-5 shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
             <div className="mb-5 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -218,7 +240,6 @@ export default function Sidebar({ role, email }: SidebarProps) {
                   </p>
                 </div>
               </div>
-
               <button
                 type="button"
                 onClick={() => setOpen(false)}
@@ -228,7 +249,6 @@ export default function Sidebar({ role, email }: SidebarProps) {
                 <X size={18} />
               </button>
             </div>
-
             <SidebarContent
               role={role}
               email={email}
