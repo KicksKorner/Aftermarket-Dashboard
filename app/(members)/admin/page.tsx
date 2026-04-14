@@ -37,34 +37,6 @@ export default async function AdminOverviewPage() {
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <Link
-            href="/admin/amazon-invites"
-            className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-blue-400/30"
-          >
-            <h2 className="text-xl font-semibold">Amazon Invites</h2>
-            <p className="mt-2 text-sm text-slate-400">
-              Add, edit and delete product invite cards.
-            </p>
-          </Link>
-<Link
-  href="/admin/tracked-products"
-  className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-blue-400/30"
->
-  <h2 className="text-xl font-semibold">Tracked Products</h2>
-  <p className="mt-2 text-sm text-slate-400">
-    Manage image URLs and manual price overrides for dashboard watchlist products.
-  </p>
-</Link>
-          <Link
-            href="/admin/pokemon-products"
-            className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-blue-400/30"
-          >
-            <h2 className="text-xl font-semibold">Pokemon Products</h2>
-            <p className="mt-2 text-sm text-slate-400">
-              Manage tracked products inside each Pokémon set.
-            </p>
-          </Link>
-
-          <Link
             href="/admin/guides"
             className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-blue-400/30"
           >
