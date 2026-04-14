@@ -28,39 +28,15 @@ export default async function VintedBotPage() {
           {/* Success badge */}
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-5 py-2 text-sm font-medium text-emerald-300">
             <Check size={15} />
-            You have Vinted Bot access
+            You can have Vinted Bot access
           </div>
 
           <h1 className="mb-4 text-4xl font-semibold tracking-tight">
-            You're all set — head to Discord
+            Already setup? — head to Discord
           </h1>
           <p className="mx-auto mb-10 max-w-xl text-lg text-slate-400">
-            Your Vinted Bot access is active. The bot runs directly inside your Discord server — head over there to start getting alerts and making profit.
+            The bot runs directly inside your Discord server — head over there to start getting alerts and making profit.
           </p>
-
-          {/* Discord CTA */}
-          <div className="mb-8 overflow-hidden rounded-[24px] border border-violet-500/20 bg-[linear-gradient(180deg,rgba(9,5,30,0.96),rgba(5,3,20,0.92))] p-8">
-            <div className="mb-4 flex justify-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-violet-500/20 bg-violet-500/10 text-violet-300">
-                <svg width="32" height="32" viewBox="0 0 127.14 96.36" fill="currentColor">
-                  <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/>
-                </svg>
-              </div>
-            </div>
-            <h2 className="mb-2 text-2xl font-semibold">Open Discord</h2>
-            <p className="mb-6 text-sm text-slate-400">
-              The Vinted Bot is waiting for you in the Aftermarket Arbitrage Discord server. Use the bot commands to set up your searches and start receiving alerts instantly.
-            </p>
-            <a
-              href="https://discord.gg/your-invite-link"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-2xl bg-[#5865F2] px-8 py-3.5 text-base font-semibold text-white transition hover:bg-[#4752C4]"
-            >
-              <ExternalLink size={16} />
-              Go to Discord Server
-            </a>
-          </div>
 
           {/* Quick tips */}
           <div className="grid gap-4 text-left sm:grid-cols-3">

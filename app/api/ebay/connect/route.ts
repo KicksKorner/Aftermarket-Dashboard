@@ -7,7 +7,11 @@ export async function GET() {
   if (!user) return NextResponse.redirect(new URL("/login", process.env.NEXT_PUBLIC_SITE_URL!));
 
   const clientId = process.env.EBAY_CLIENT_ID!;
-  const redirectUri = encodeURIComponent(`${process.env.NEXT_PUBLIC_SITE_URL}/api/ebay/callback`);
+
+  // eBay requires the RuName as the redirect_uri — NOT the actual callback URL.
+  // RuName is found in eBay Developer Portal → your Production app → User Tokens.
+  const ruName = process.env.EBAY_RUNAME!;
+
   const scopes = encodeURIComponent([
     "https://api.ebay.com/oauth/api_scope",
     "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
@@ -20,7 +24,7 @@ export async function GET() {
     `https://auth.ebay.com/oauth2/authorize` +
     `?client_id=${clientId}` +
     `&response_type=code` +
-    `&redirect_uri=${redirectUri}` +
+    `&redirect_uri=${encodeURIComponent(ruName)}` +
     `&scope=${scopes}` +
     `&state=${state}`;
 

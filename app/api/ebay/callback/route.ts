@@ -18,10 +18,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${siteUrl}/dashboard/inventory?ebay=error`);
   }
 
-  // Exchange code for tokens
   const clientId = process.env.EBAY_CLIENT_ID!;
   const clientSecret = process.env.EBAY_CLIENT_SECRET!;
-  const redirectUri = `${siteUrl}/api/ebay/callback`;
+
+  // Must use RuName as redirect_uri in the token exchange — same as the authorize step.
+  const ruName = process.env.EBAY_RUNAME!;
 
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 
@@ -34,12 +35,13 @@ export async function GET(req: NextRequest) {
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code,
-      redirect_uri: redirectUri,
+      redirect_uri: ruName,
     }),
   });
 
   if (!tokenRes.ok) {
-    console.error("eBay token exchange failed:", await tokenRes.text());
+    const errText = await tokenRes.text();
+    console.error("eBay token exchange failed:", errText);
     return NextResponse.redirect(`${siteUrl}/dashboard/inventory?ebay=error`);
   }
 
