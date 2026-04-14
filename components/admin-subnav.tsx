@@ -6,13 +6,15 @@ import { usePathname } from "next/navigation";
 const adminLinks = [
   { href: "/admin", label: "Overview", exact: true },
   { href: "/admin/guides", label: "Guides" },
+  { href: "/dashboard/deal-post", label: "Deal Poster" },
+  { href: "/dashboard/ama-webhook", label: "AMA Webhook" },
 ];
 
 export default function AdminSubnav() {
   const pathname = usePathname();
 
   return (
-    <nav className="mb-8 flex gap-2">
+    <nav className="mb-8 flex flex-wrap gap-2">
       {adminLinks.map((link) => {
         const isActive = link.exact
           ? pathname === link.href

@@ -37,6 +37,26 @@ export default async function AdminOverviewPage() {
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <Link
+            href="/dashboard/deal-post"
+            className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-blue-400/30"
+          >
+            <h2 className="text-xl font-semibold">Deal Poster</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Post clean deal alerts to Discord.
+            </p>
+          </Link>
+
+          <Link
+            href="/dashboard/ama-webhook"
+            className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-blue-400/30"
+          >
+            <h2 className="text-xl font-semibold">AMA Webhook</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Manage and trigger AMA webhook notifications.
+            </p>
+          </Link>
+
+          <Link
             href="/admin/guides"
             className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-blue-400/30"
           >

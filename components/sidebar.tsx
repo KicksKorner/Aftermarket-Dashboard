@@ -15,8 +15,6 @@ import {
   Footprints,
   Menu,
   X,
-  Send,
-  Webhook,
 } from "lucide-react";
 
 type SidebarProps = {
@@ -37,18 +35,6 @@ const navItems: NavItem[] = [
     href: "/dashboard",
     label: "Dashboard",
     icon: LayoutDashboard,
-  },
-  {
-    href: "/dashboard/deal-post",
-    label: "Deal Poster",
-    icon: Send,
-    startsWith: true,
-  },
-  {
-    href: "/dashboard/ama-webhook",
-    label: "AMA Webhook",
-    icon: Webhook,
-    startsWith: true,
   },
   {
     href: "/dashboard/sole-scan",
