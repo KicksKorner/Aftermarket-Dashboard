@@ -98,9 +98,9 @@ export default async function AdminMembersPage() {
     try {
       const { data: authUsersData } = await service.auth.admin.listUsers({ perPage: 1000 });
       const authUsers = authUsersData?.users ?? [];
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, email, role, created_at, discord_username");
+      const { data: profiles } = await service
+  .from("profiles")
+  .select("id, email, role, created_at, discord_username");
       const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
       members = authUsers.map((u) => {
         const profile = profileMap.get(u.id);
