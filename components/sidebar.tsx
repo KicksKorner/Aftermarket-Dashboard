@@ -17,6 +17,7 @@ import {
   X,
   Lock,
   ShoppingBag,
+  Calculator,
 } from "lucide-react";
 
 type SidebarProps = {
@@ -31,20 +32,18 @@ type NavItem = {
   startsWith?: boolean;
   adminOnly?: boolean;
   premiumLocked?: boolean;
+  lockedHref?: string;
 };
 
 const navItems: NavItem[] = [
-  {
-    href: "/dashboard",
-    label: "Dashboard",
-    icon: LayoutDashboard,
-  },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   {
     href: "/dashboard/sole-scan",
     label: "Sole Scan",
     icon: Footprints,
     startsWith: true,
     premiumLocked: true,
+    lockedHref: "/upgrade",
   },
   {
     href: "/dashboard/vinted-bot",
@@ -52,37 +51,21 @@ const navItems: NavItem[] = [
     icon: ShoppingBag,
     startsWith: true,
     premiumLocked: true,
+    lockedHref: "/vinted-bot",
   },
-  {
-    href: "/dashboard/inventory",
-    label: "AIO Tracker",
-    icon: Boxes,
-    startsWith: true,
-  },
-  {
-    href: "/dashboard/expenses",
-    label: "Expenses",
-    icon: Receipt,
-    startsWith: true,
-  },
-  {
-    href: "/dashboard/gmail-sync",
-    label: "Gmail Sync",
-    icon: Mail,
-    startsWith: true,
-  },
-  {
-    href: "/guides",
-    label: "Guides",
-    icon: BookOpen,
-  },
-  {
-    href: "/admin",
-    label: "Admin",
-    icon: Shield,
-    adminOnly: true,
-  },
+  { href: "/dashboard/inventory", label: "AIO Tracker", icon: Boxes, startsWith: true },
+  { href: "/dashboard/expenses", label: "Expenses", icon: Receipt, startsWith: true },
+  { href: "/dashboard/gmail-sync", label: "Gmail Sync", icon: Mail, startsWith: true },
+  { href: "/dashboard/profit-calculator", label: "Profit Calculator", icon: Calculator, startsWith: true },
+  { href: "/guides", label: "Guides", icon: BookOpen },
+  { href: "/admin", label: "Admin", icon: Shield, adminOnly: true },
 ];
+
+const roleBadgeClass: Record<string, string> = {
+  admin: "border-red-400/30 bg-red-500/10 text-red-300",
+  premium: "border-orange-400/30 bg-orange-500/10 text-orange-300",
+  member: "border-emerald-400/20 bg-emerald-500/10 text-emerald-300",
+};
 
 function SidebarContent({
   role,
@@ -111,13 +94,7 @@ function SidebarContent({
   return (
     <div className="flex h-full flex-col">
       <div className="mb-8 flex items-center gap-3">
-        <Image
-          src="/logo.png"
-          alt="Aftermarket Arbitrage"
-          width={42}
-          height={42}
-          className="rounded-lg"
-        />
+        <Image src="/logo.png" alt="Aftermarket Arbitrage" width={42} height={42} className="rounded-lg" />
         <div>
           <p className="text-xs text-blue-300">Aftermarket Arbitrage</p>
           <h1 className="text-xl font-semibold tracking-tight">Members Area</h1>
@@ -125,11 +102,9 @@ function SidebarContent({
       </div>
 
       <div className="mb-8 rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,27,60,0.95),rgba(7,16,33,0.9))] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-        <p className="text-xs uppercase tracking-[0.22em] text-slate-500">
-          Signed in as
-        </p>
+        <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Signed in as</p>
         <p className="mt-3 truncate text-sm text-slate-200">{email}</p>
-        <p className="mt-2 inline-flex rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-emerald-300">
+        <p className={`mt-2 inline-flex rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] ${roleBadgeClass[role] ?? roleBadgeClass.member}`}>
           {role}
         </p>
       </div>
@@ -145,11 +120,7 @@ function SidebarContent({
             return (
               <Link
                 key={item.href}
-                href={
-                  item.href === "/dashboard/vinted-bot"
-                    ? "/vinted-bot"
-                    : "/upgrade"
-                }
+                href={item.lockedHref ?? "/upgrade"}
                 onClick={onNavigate}
                 className={`${baseItem} ${lockedItem}`}
               >
@@ -195,26 +166,15 @@ export default function Sidebar({ role, email }: SidebarProps) {
       <div className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-[#071021]/95 backdrop-blur-xl lg:hidden">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            <Image
-              src="/logo.png"
-              alt="Aftermarket Arbitrage"
-              width={34}
-              height={34}
-              className="rounded-lg"
-            />
+            <Image src="/logo.png" alt="Aftermarket Arbitrage" width={34} height={34} className="rounded-lg" />
             <div>
               <p className="text-[11px] text-blue-300">Aftermarket Arbitrage</p>
-              <p className="text-base font-semibold leading-tight text-white">
-                Members Area
-              </p>
+              <p className="text-base font-semibold leading-tight text-white">Members Area</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
+          <button type="button" onClick={() => setOpen(true)}
             className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white"
-            aria-label="Open menu"
-          >
+            aria-label="Open menu">
             <Menu size={20} />
           </button>
         </div>
@@ -224,49 +184,28 @@ export default function Sidebar({ role, email }: SidebarProps) {
         <SidebarContent role={role} email={email} pathname={pathname} />
       </aside>
 
-      {open ? (
+      {open && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/60"
-            onClick={() => setOpen(false)}
-            aria-label="Close menu overlay"
-          />
+          <button type="button" className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} aria-label="Close menu overlay" />
           <aside className="absolute left-0 top-0 h-full w-[86%] max-w-[320px] border-r border-white/10 bg-[#071021] p-5 shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
             <div className="mb-5 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <Image
-                  src="/logo.png"
-                  alt="Aftermarket Arbitrage"
-                  width={38}
-                  height={38}
-                  className="rounded-lg"
-                />
+                <Image src="/logo.png" alt="Aftermarket Arbitrage" width={38} height={38} className="rounded-lg" />
                 <div>
                   <p className="text-xs text-blue-300">Aftermarket Arbitrage</p>
-                  <p className="text-lg font-semibold text-white">
-                    Members Area
-                  </p>
+                  <p className="text-lg font-semibold text-white">Members Area</p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
+              <button type="button" onClick={() => setOpen(false)}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white"
-                aria-label="Close menu"
-              >
+                aria-label="Close menu">
                 <X size={18} />
               </button>
             </div>
-            <SidebarContent
-              role={role}
-              email={email}
-              pathname={pathname}
-              onNavigate={() => setOpen(false)}
-            />
+            <SidebarContent role={role} email={email} pathname={pathname} onNavigate={() => setOpen(false)} />
           </aside>
         </div>
-      ) : null}
+      )}
     </>
   );
 }

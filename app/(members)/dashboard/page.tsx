@@ -1,21 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
 import DashboardPerformance from "@/components/DashboardPerformance";
 import Link from "next/link";
-import {
-  BookOpen,
-  Video,
-  Boxes,
-  Receipt,
-  Mail,
-  Footprints,
-  Lock,
-} from "lucide-react";
+import { BookOpen, Video, Boxes, Receipt, Mail, Footprints, Lock, ShoppingBag } from "lucide-react";
+
+const accessLevelClass: Record<string, string> = {
+  admin: "border-red-400/30 bg-red-500/10 text-red-300",
+  premium: "border-orange-400/30 bg-orange-500/10 text-orange-300",
+  member: "border-white/10 bg-white/5 text-slate-300",
+};
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -33,6 +29,14 @@ export default async function DashboardPage() {
       href: isUnlocked ? "/dashboard/sole-scan" : "/upgrade",
       icon: Footprints,
       iconClasses: "border-cyan-500/20 bg-cyan-500/10 text-cyan-300",
+      locked: !isUnlocked,
+    },
+    {
+      title: "Vinted Bot",
+      subtitle: "Real-time Vinted monitor and alerts",
+      href: "/vinted-bot",
+      icon: ShoppingBag,
+      iconClasses: "border-violet-500/20 bg-violet-500/10 text-violet-300",
       locked: !isUnlocked,
     },
     {
@@ -87,11 +91,8 @@ export default async function DashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {isUnlocked ? (
-            <span className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300">
-              {role === "admin" ? "Admin" : "Premium Active"}
-            </span>
-          ) : (
+          {/* Upgrade button — only for member role */}
+          {role === "member" && (
             <Link
               href="/upgrade"
               className="inline-flex rounded-full border border-blue-400/30 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-300 transition hover:bg-blue-500/20"
@@ -100,13 +101,18 @@ export default async function DashboardPage() {
             </Link>
           )}
 
-          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300">
-            {isUnlocked ? "Premium access enabled" : "Member access"}
+          {/* Access level badge */}
+          <div className={`rounded-full border px-4 py-2 text-sm font-medium capitalize ${accessLevelClass[role] ?? accessLevelClass.member}`}>
+            Access level: {role}
           </div>
 
-          <div className="rounded-full border border-white/10 bg-[#0a1228] px-4 py-2 text-sm">
-            <span className="text-slate-500">Status: </span>
-            <span className="font-semibold text-white">Live</span>
+          {/* Status: Live — green dot */}
+          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-[#0a1228] px-4 py-2 text-sm">
+            <span className="text-slate-500">Status:</span>
+            <span className="flex items-center gap-1.5 font-semibold text-white">
+              <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
+              Live
+            </span>
           </div>
         </div>
       </section>
@@ -124,7 +130,6 @@ export default async function DashboardPage() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {featureCards.map((card) => {
             const Icon = card.icon;
-
             return (
               <Link
                 key={card.title}
@@ -142,9 +147,7 @@ export default async function DashboardPage() {
                   </div>
                 )}
 
-                <div
-                  className={`mb-6 flex h-12 w-12 items-center justify-center rounded-2xl border ${card.locked ? "border-white/10 bg-white/5 text-slate-500" : card.iconClasses}`}
-                >
+                <div className={`mb-6 flex h-12 w-12 items-center justify-center rounded-2xl border ${card.locked ? "border-white/10 bg-white/5 text-slate-500" : card.iconClasses}`}>
                   <Icon size={20} />
                 </div>
 

@@ -28,7 +28,7 @@ export default async function VintedBotPage() {
 
   const testimonials = [
     "Locked in £250 profit in one week. Setup took no time — pings started flying in instantly.",
-    "The autobuy is super overpowered. Winning things I'd never get before. Literally a money printer.",
+    "One click and it's bought. By the time I'd have found it manually it would've been gone.",
     "Don't waste hours searching manually. I get notified the second an item is uploaded. Game changer.",
     "Way more effective than other monitors. As a lifetime member — huge profits to be made.",
   ];
@@ -46,8 +46,8 @@ export default async function VintedBotPage() {
     },
     {
       icon: Bot,
-      title: "Autobuy capability",
-      desc: "Selected searches can trigger an automatic purchase — no manual action needed.",
+      title: "One-click buying",
+      desc: "Every item can be purchased instantly with a single tap — on mobile or desktop. No delays, no missing out.",
     },
     {
       icon: Zap,
@@ -79,7 +79,6 @@ export default async function VintedBotPage() {
             manually — it's already gone.
           </p>
 
-          {/* Lock badge */}
           <div className="mt-8 inline-flex items-center gap-2 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-5 py-3 text-sm font-medium text-amber-300">
             <Lock size={15} />
             This is a paid add-on — purchase access below to get started
@@ -136,7 +135,7 @@ export default async function VintedBotPage() {
         {/* Testimonials */}
         <div className="mb-16">
           <h2 className="mb-6 text-center text-2xl font-semibold">
-            What beta members are saying
+            What members are saying
           </h2>
           <div className="grid gap-4 md:grid-cols-2">
             {testimonials.map((t, i) => (
@@ -146,7 +145,7 @@ export default async function VintedBotPage() {
               >
                 <div className="mb-3 flex gap-0.5">
                   {[...Array(5)].map((_, s) => (
-                    <span key={s} className="text-amber-400 text-sm">★</span>
+                    <span key={s} className="text-sm text-amber-400">★</span>
                   ))}
                 </div>
                 <p className="text-sm text-slate-300">"{t}"</p>
@@ -159,9 +158,9 @@ export default async function VintedBotPage() {
         {/* Stats bar */}
         <div className="mb-16 grid grid-cols-3 gap-4 rounded-[24px] border border-blue-500/15 bg-[#071021] p-6">
           {[
-            { value: "100%", label: "Beta member satisfaction" },
-            { value: "£60–£88", label: "Average profit per flip" },
-            { value: "2 flips", label: "Covers the full year cost" },
+            { value: "10+", label: "Members already using this" },
+            { value: "£20–£30", label: "Average profit per flip" },
+            { value: "3 flips", label: "Covers the full year cost" },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <p className="text-2xl font-semibold text-white">{stat.value}</p>
@@ -176,26 +175,27 @@ export default async function VintedBotPage() {
             Get access
           </h2>
           <p className="mb-10 text-center text-slate-400">
-            30 beta members tested this. Every single one loved it.
+            Simple pricing, no hidden fees. Cancel or renew anytime.
           </p>
 
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-6 md:grid-cols-3">
+
             {/* 6 month */}
-            <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-8">
+            <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-7">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
                 6 month access
               </p>
               <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-4xl font-semibold">£69</span>
+                <span className="text-4xl font-semibold">£79</span>
                 <span className="text-slate-500">/ 6 months</span>
               </div>
-              <p className="mt-1 text-sm text-slate-500">£11.50/month</p>
+              <p className="mt-1 text-sm text-slate-500">£13.17/month</p>
 
               <div className="my-6 space-y-3">
                 {[
                   "Real-time Vinted monitor alerts",
                   "Items flagged below market value",
-                  "Autobuy on selected searches",
+                  "One-click buying on any device",
                   "Full setup support from the team",
                 ].map((f) => (
                   <div key={f} className="flex items-start gap-3">
@@ -211,7 +211,7 @@ export default async function VintedBotPage() {
                 href="#"
                 className="flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10"
               >
-                Purchase 6 month access — £69
+                Purchase 6 months — £79
               </a>
               <p className="mt-2 text-center text-xs text-slate-600">
                 Payment link coming soon
@@ -219,7 +219,7 @@ export default async function VintedBotPage() {
             </div>
 
             {/* 12 month - recommended */}
-            <div className="relative rounded-[24px] border border-violet-500/30 bg-[linear-gradient(180deg,rgba(9,5,30,0.96),rgba(5,3,20,0.92))] p-8 shadow-[0_0_60px_rgba(139,92,246,0.1)]">
+            <div className="relative rounded-[24px] border border-violet-500/30 bg-[linear-gradient(180deg,rgba(9,5,30,0.96),rgba(5,3,20,0.92))] p-7 shadow-[0_0_60px_rgba(139,92,246,0.1)]">
               <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-600 px-4 py-1 text-xs font-semibold text-white">
                   ⭐ Best value
@@ -230,11 +230,11 @@ export default async function VintedBotPage() {
                 12 month access
               </p>
               <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-4xl font-semibold">£99</span>
+                <span className="text-4xl font-semibold">£109</span>
                 <span className="text-slate-500">/ year</span>
               </div>
               <p className="mt-1 text-sm text-slate-500">
-                £8.25/month — save £39 vs 6-month
+                £9.08/month — save £49 vs 6-month twice
               </p>
 
               <div className="my-6 space-y-3">
@@ -257,17 +257,65 @@ export default async function VintedBotPage() {
                 href="#"
                 className="flex w-full items-center justify-center rounded-2xl bg-violet-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-violet-500"
               >
-                Purchase 12 month access — £99
+                Purchase 12 months — £109
               </a>
               <p className="mt-2 text-center text-xs text-slate-600">
                 Payment link coming soon
               </p>
             </div>
+
+            {/* Lifetime exclusive */}
+            <div className="relative rounded-[24px] border border-amber-500/25 bg-[linear-gradient(180deg,rgba(20,14,5,0.96),rgba(12,8,3,0.92))] p-7 shadow-[0_0_60px_rgba(245,158,11,0.07)]">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/20 px-4 py-1 text-xs font-semibold text-amber-300">
+                  💜 Lifetime exclusive
+                </span>
+              </div>
+
+              <p className="text-xs uppercase tracking-[0.18em] text-amber-500">
+                Lifetime members only
+              </p>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-4xl font-semibold">£69</span>
+                <span className="text-slate-500">/ year</span>
+              </div>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="text-sm text-slate-500">
+                  Locked in for life
+                </span>
+                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400 line-through decoration-amber-500/50">
+                  £109
+                </span>
+              </div>
+
+              <div className="my-6 space-y-3">
+                {[
+                  "Everything in 12 month plan",
+                  "40% off — exclusively for you",
+                  "Rate locked permanently",
+                  "First access to future updates",
+                  "Priority support from the team",
+                ].map((f) => (
+                  <div key={f} className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/10">
+                      <Check size={11} className="text-amber-400" />
+                    </div>
+                    <span className="text-sm text-slate-300">{f}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-2xl border border-amber-500/15 bg-amber-500/8 p-3 text-center text-xs text-amber-300/80">
+                This rate is never going public. You'll receive your private
+                access link separately.
+              </div>
+            </div>
+
           </div>
         </div>
 
         {/* Questions */}
-        <div className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 text-center">
+        <div className="mt-10 rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 text-center">
           <p className="text-sm text-slate-400">
             Got questions before purchasing? Open a ticket in Discord and the
             team will sort you out.
@@ -279,6 +327,7 @@ export default async function VintedBotPage() {
             Back to Dashboard
           </Link>
         </div>
+
       </div>
     </main>
   );
