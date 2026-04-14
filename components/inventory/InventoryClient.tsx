@@ -113,11 +113,12 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
     }).filter((s): s is SaleWithBuyPrice => s !== null);
   }, [items, sales]);
 
-  const stats = useMemo(() => {
+const stats = useMemo(() => {
     const inv = getInventoryStats(items);
     const sum = getSalesSummary(salesWithBuyPrice);
+    const totalUnitsSold = items.reduce((acc, i) => acc + Number(i.quantity_sold ?? 0), 0);
     return {
-      inStockCount: inv.inStockCount, soldCount: inv.soldCount,
+      inStockCount: inv.inStockCount, soldCount: totalUnitsSold,
       capitalLocked: inv.capitalLocked, totalProfit: sum.totalProfit,
       avgROI: salesWithBuyPrice.length > 0
         ? salesWithBuyPrice.reduce((acc, s) => {
@@ -138,13 +139,13 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
     return items.filter((i) => Number(i.quantity_remaining) === 0);
   }, [items, activeFilter]);
 
-  const statCards = [
-    { title: "In Stock", value: String(stats.inStockCount), icon: Package, iconClasses: "border-amber-500/20 bg-amber-500/10 text-amber-300" },
-    { title: "Sold", value: String(stats.soldCount), icon: CheckSquare, iconClasses: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" },
-    { title: "Capital Locked", value: `£${stats.capitalLocked.toFixed(2)}`, icon: Coins, iconClasses: "border-slate-500/20 bg-slate-500/10 text-slate-300" },
-    { title: "Total Profit", value: `£${stats.totalProfit.toFixed(2)}`, icon: PoundSterling, iconClasses: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" },
-    { title: "Avg ROI", value: `${stats.avgROI.toFixed(1)}%`, icon: TrendingUp, iconClasses: "border-cyan-500/20 bg-cyan-500/10 text-cyan-300" },
-  ];
+const statCards = [
+  { title: "In Stock", value: String(stats.inStockCount), icon: Package, iconClasses: "border-amber-500/20 bg-amber-500/10 text-amber-300" },
+  { title: "Units Sold", value: String(stats.soldCount), icon: CheckSquare, iconClasses: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" },
+  { title: "Capital Locked", value: `£${stats.capitalLocked.toFixed(2)}`, icon: Coins, iconClasses: "border-slate-500/20 bg-slate-500/10 text-slate-300" },
+  { title: "Total Profit", value: `£${stats.totalProfit.toFixed(2)}`, icon: PoundSterling, iconClasses: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" },
+  { title: "Avg ROI", value: `${stats.avgROI.toFixed(1)}%`, icon: TrendingUp, iconClasses: "border-cyan-500/20 bg-cyan-500/10 text-cyan-300" },
+];
 
   function handleOpenSoldModal(item: InventoryItem) { setSelectedItem(item); setShowSoldModal(true); }
   function handleCloseSoldModal() { setSelectedItem(null); setShowSoldModal(false); }
