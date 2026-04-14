@@ -365,9 +365,17 @@ export default function GmailSyncPage() {
                   {/* Expanded items */}
                   {isExpanded && (
                     <div className="border-t border-white/8 p-4">
+                      {imp.status === "pending" && (
+                        <div className="mb-4 flex items-start gap-2.5 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-300">
+                          <AlertCircle size={13} className="mt-0.5 flex-shrink-0" />
+                          <span>
+                            <span className="font-semibold">Review before approving.</span> Parsing is automatic but not always perfect — check item names and prices are correct before adding to inventory. Edit any field below.
+                          </span>
+                        </div>
+                      )}
                       <div className="mb-3 flex items-center gap-2">
                         <Pencil size={12} className="text-slate-500" />
-                        <p className="text-xs text-slate-500">Review and edit items before approving</p>
+                        <p className="text-xs text-slate-500">Edit item names, quantities and prices below</p>
                       </div>
                       <div className="space-y-2">
                         {items.map((item, idx) => (
