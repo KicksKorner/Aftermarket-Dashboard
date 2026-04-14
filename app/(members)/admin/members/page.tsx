@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import AdminSubnav from "@/components/admin-subnav";
 
@@ -19,7 +20,13 @@ async function setMemberRole(formData: FormData) {
   const memberId = String(formData.get("member_id") || "");
   const newRole = String(formData.get("new_role") || "");
   if (!memberId || !["member", "premium", "admin"].includes(newRole)) return;
-  await supabase.from("profiles").update({ role: newRole }).eq("id", memberId);
+
+  // Upsert in case profile row doesn't exist yet
+  await supabase.from("profiles").upsert(
+    { id: memberId, role: newRole },
+    { onConflict: "id" }
+  );
+
   revalidatePath("/admin/members");
 }
 
@@ -34,16 +41,41 @@ export default async function AdminMembersPage() {
   if (!user) redirect("/login");
   if (!isAdmin) redirect("/dashboard");
 
-  const { data: members } = await supabase
+  // Use service role to list all auth users so we never miss anyone
+  const serviceSupabase = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const { data: authUsersData } = await serviceSupabase.auth.admin.listUsers();
+  const authUsers = authUsersData?.users ?? [];
+
+  // Get all profiles
+  const { data: profiles } = await supabase
     .from("profiles")
-    .select("id, email, role, created_at, discord_id, discord_username")
-    .order("created_at", { ascending: false });
+    .select("id, email, role, created_at, discord_id, discord_username");
+
+  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+
+  // Merge — every auth user gets a row, defaulting to member if no profile yet
+  const members = authUsers.map((u) => {
+    const profile = profileMap.get(u.id);
+    return {
+      id: u.id,
+      email: u.email ?? profile?.email ?? "No email",
+      role: profile?.role ?? "member",
+      created_at: u.created_at,
+      discord_id: profile?.discord_id ?? null,
+      discord_username: profile?.discord_username ?? null,
+      provider: u.app_metadata?.provider ?? "email",
+    };
+  }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   const counts = {
-    total: members?.length ?? 0,
-    premium: members?.filter((m) => m.role === "premium").length ?? 0,
-    admin: members?.filter((m) => m.role === "admin").length ?? 0,
-    member: members?.filter((m) => m.role === "member").length ?? 0,
+    total: members.length,
+    premium: members.filter((m) => m.role === "premium").length,
+    admin: members.filter((m) => m.role === "admin").length,
+    member: members.filter((m) => m.role === "member").length,
   };
 
   return (
@@ -74,66 +106,86 @@ export default async function AdminMembersPage() {
 
         {/* Members list */}
         <div className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6">
-          <h2 className="mb-6 text-xl font-semibold">All Members</h2>
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="text-xl font-semibold">All Members</h2>
+            <p className="text-xs text-slate-500">{counts.total} total</p>
+          </div>
 
           <div className="space-y-3">
-            {members?.map((member) => (
+            {members.map((member) => (
               <div
                 key={member.id}
                 className="flex flex-col gap-4 rounded-[20px] border border-white/8 bg-[#030814] p-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-xs font-semibold uppercase text-slate-300">
+                  {/* Avatar */}
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold uppercase text-slate-300">
                     {member.discord_username?.[0] ?? member.email?.[0] ?? "?"}
                   </div>
+
                   <div>
-                    <p className="text-sm font-medium text-white">
-                      {member.email ?? "No email"}
-                    </p>
+                    <p className="text-sm font-medium text-white">{member.email}</p>
+
+                    {/* Discord username */}
                     {member.discord_username && (
                       <p className="mt-0.5 flex items-center gap-1.5 text-xs text-[#5865F2]">
-                        <svg width="12" height="12" viewBox="0 0 127.14 96.36" fill="currentColor">
+                        <svg width="11" height="11" viewBox="0 0 127.14 96.36" fill="currentColor">
                           <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/>
                         </svg>
                         {member.discord_username}
-                        {member.discord_id && (
-                          <span className="text-slate-600">#{member.discord_id.slice(-4)}</span>
-                        )}
                       </p>
                     )}
-                    <p className="text-xs text-slate-500">
-                      Joined{" "}
-                      {member.created_at
-                        ? new Date(member.created_at).toLocaleDateString("en-GB", {
-                            day: "numeric", month: "short", year: "numeric",
-                          })
-                        : "Unknown"}
-                    </p>
+
+                    <div className="mt-0.5 flex items-center gap-2">
+                      <p className="text-xs text-slate-500">
+                        Joined{" "}
+                        {member.created_at
+                          ? new Date(member.created_at).toLocaleDateString("en-GB", {
+                              day: "numeric", month: "short", year: "numeric",
+                            })
+                          : "Unknown"}
+                      </p>
+                      {/* Provider badge */}
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                        member.provider === "discord"
+                          ? "border-[#5865F2]/30 bg-[#5865F2]/10 text-[#7289da]"
+                          : "border-white/10 bg-white/5 text-slate-500"
+                      }`}>
+                        {member.provider === "discord" ? "Discord" : "Email"}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                {/* Role + actions */}
+                <div className="flex flex-wrap items-center gap-3">
                   <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] ${roleBadge[member.role] ?? roleBadge.member}`}>
                     {member.role ?? "member"}
                   </span>
 
-                  {member.id !== user.id && (
+                  {member.id !== user.id ? (
                     <form action={setMemberRole} className="flex flex-wrap gap-2">
                       <input type="hidden" name="member_id" value={member.id} />
 
-                      {member.role !== "premium" && member.role !== "admin" && (
+                      {member.role === "member" && (
                         <button name="new_role" value="premium"
                           className="rounded-2xl border border-orange-500/20 bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-300 transition hover:bg-orange-500/20">
                           Grant Premium
                         </button>
                       )}
                       {member.role === "premium" && (
-                        <button name="new_role" value="member"
-                          className="rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/20">
-                          Revoke Premium
-                        </button>
+                        <>
+                          <button name="new_role" value="member"
+                            className="rounded-2xl border border-slate-500/20 bg-slate-500/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-slate-500/20">
+                            Revoke Premium
+                          </button>
+                          <button name="new_role" value="admin"
+                            className="rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/20">
+                            Make Admin
+                          </button>
+                        </>
                       )}
-                      {member.role !== "admin" && (
+                      {member.role === "member" && (
                         <button name="new_role" value="admin"
                           className="rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/20">
                           Make Admin
@@ -146,16 +198,14 @@ export default async function AdminMembersPage() {
                         </button>
                       )}
                     </form>
-                  )}
-
-                  {member.id === user.id && (
+                  ) : (
                     <span className="text-xs text-slate-600">(you)</span>
                   )}
                 </div>
               </div>
             ))}
 
-            {(!members || members.length === 0) && (
+            {members.length === 0 && (
               <p className="py-8 text-center text-sm text-slate-500">No members found.</p>
             )}
           </div>
