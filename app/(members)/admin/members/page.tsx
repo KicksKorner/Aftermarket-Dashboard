@@ -22,12 +22,15 @@ function getServiceClient() {
 
 async function setMemberRole(formData: FormData) {
   "use server";
-  const { supabase, isAdmin } = await requireAdmin();
+  const { isAdmin } = await requireAdmin();
   if (!isAdmin) return;
   const memberId = String(formData.get("member_id") || "");
   const newRole = String(formData.get("new_role") || "");
   if (!memberId || !["member", "premium", "admin"].includes(newRole)) return;
-  await supabase.from("profiles").upsert({ id: memberId, role: newRole }, { onConflict: "id" });
+  const service = getServiceClient();
+  if (service) {
+    await service.from("profiles").update({ role: newRole }).eq("id", memberId);
+  }
   revalidatePath("/admin/members");
 }
 
