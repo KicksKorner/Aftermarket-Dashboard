@@ -32,7 +32,6 @@ export async function POST() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Get eBay connection
   const { data: conn } = await supabase
     .from("ebay_connections")
     .select("*")
@@ -43,7 +42,6 @@ export async function POST() {
 
   let accessToken = conn.access_token;
 
-  // Refresh token if expired
   if (new Date(conn.token_expires_at) <= new Date()) {
     const refreshed = await refreshEbayToken(conn.refresh_token);
     if (!refreshed) return NextResponse.json({ error: "Token refresh failed" }, { status: 401 });
@@ -56,7 +54,6 @@ export async function POST() {
     }).eq("user_id", user.id);
   }
 
-  // Fetch recent orders from eBay (last 90 days)
   const dateFrom = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
   const ordersRes = await fetch(
     `https://api.ebay.com/sell/fulfillment/v1/order?filter=lastmodifieddate:[${dateFrom}..],orderfulfillmentstatus:{FULFILLED|IN_PROGRESS}`,
@@ -71,7 +68,6 @@ export async function POST() {
   const ordersData = await ordersRes.json();
   const orders = ordersData.orders || [];
 
-  // Get existing inventory items for matching
   const { data: inventoryItems } = await supabase
     .from("inventory_items")
     .select("id, item_name, quantity_remaining")
@@ -83,12 +79,11 @@ export async function POST() {
   for (const order of orders) {
     for (const lineItem of order.lineItems || []) {
       const orderId = `${order.orderId}-${lineItem.lineItemId}`;
-      const title = lineItem.title || "eBay Item";
-      const qty = lineItem.quantity || 1;
-      const price = parseFloat(lineItem.lineItemCost?.value || "0");
-      const soldDate = order.creationDate || new Date().toISOString();
+      const title: string = lineItem.title || "eBay Item";
+      const qty: number = lineItem.quantity || 1;
+      const price: number = parseFloat(lineItem.lineItemCost?.value || "0");
+      const soldDate: string = order.creationDate || new Date().toISOString();
 
-      // Skip if already synced
       const { data: existing } = await supabase
         .from("ebay_sales")
         .select("id")
@@ -98,7 +93,6 @@ export async function POST() {
 
       if (existing) continue;
 
-      // Try to match inventory item by title similarity
       let matchedItemId: string | null = null;
       let autoMatched = false;
 
@@ -109,7 +103,7 @@ export async function POST() {
           return (
             titleLower.includes(name) ||
             name.includes(titleLower) ||
-            name.split(" ").filter((w) => w.length > 3).every((w) => titleLower.includes(w))
+            name.split(" ").filter((w: string) => w.length > 3).every((w: string) => titleLower.includes(w))
           );
         });
 
@@ -117,7 +111,6 @@ export async function POST() {
           matchedItemId = match.id;
           autoMatched = true;
 
-          // Mark inventory item as sold
           const newRemaining = Math.max(0, Number(match.quantity_remaining) - qty);
           const nowStr = new Date(soldDate).toISOString().split("T")[0];
 
@@ -133,7 +126,6 @@ export async function POST() {
           });
 
           await supabase.from("inventory_items").update({
-            quantity_sold: supabase.rpc ? undefined : undefined,
             quantity_remaining: newRemaining,
             status: newRemaining === 0 ? "sold" : "in_stock",
             sold_price: price,
@@ -144,7 +136,6 @@ export async function POST() {
         }
       }
 
-      // Log the eBay sale
       await supabase.from("ebay_sales").insert({
         user_id: user.id,
         ebay_order_id: orderId,
