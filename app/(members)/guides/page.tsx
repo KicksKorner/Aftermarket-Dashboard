@@ -1,190 +1,82 @@
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { revalidatePath } from "next/cache";
-import AdminSubnav from "@/components/admin-subnav";
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { BookOpen, ArrowRight } from "lucide-react";
 
-async function requireAdmin() {
+export default async function GuidesPage() {
   const supabase = await createClient();
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) return { supabase, user: null, isAdmin: false };
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  return {
-    supabase,
-    user,
-    isAdmin: profile?.role === "admin",
-  };
-}
-
-async function addGuide(formData: FormData) {
-  "use server";
-
-  const { supabase, isAdmin } = await requireAdmin();
-  if (!isAdmin) return;
-
-  const title = String(formData.get("title") || "");
-  const slug = String(formData.get("slug") || "");
-  const summary = String(formData.get("summary") || "");
-  const content = String(formData.get("content") || "");
-
-  if (!title || !slug) return;
-
-  await supabase.from("guides").insert({ title, slug, summary, content });
-
-  revalidatePath("/admin/guides");
-  revalidatePath("/guides");
-  revalidatePath("/dashboard");
-}
-
-async function updateGuide(formData: FormData) {
-  "use server";
-
-  const { supabase, isAdmin } = await requireAdmin();
-  if (!isAdmin) return;
-
-  const id = Number(formData.get("id"));
-  const title = String(formData.get("title") || "");
-  const slug = String(formData.get("slug") || "");
-  const summary = String(formData.get("summary") || "");
-  const content = String(formData.get("content") || "");
-
-  if (!id || !title || !slug) return;
-
-  await supabase
-    .from("guides")
-    .update({ title, slug, summary, content })
-    .eq("id", id);
-
-  revalidatePath("/admin/guides");
-  revalidatePath("/guides");
-  revalidatePath("/dashboard");
-}
-
-async function deleteGuide(formData: FormData) {
-  "use server";
-
-  const { supabase, isAdmin } = await requireAdmin();
-  if (!isAdmin) return;
-
-  const id = Number(formData.get("id"));
-  if (!id) return;
-
-  await supabase.from("guides").delete().eq("id", id);
-
-  revalidatePath("/admin/guides");
-  revalidatePath("/guides");
-  revalidatePath("/dashboard");
-}
-
-export default async function AdminGuidesPage() {
-  const { supabase, user, isAdmin } = await requireAdmin();
-
   if (!user) redirect("/login");
-  if (!isAdmin) redirect("/dashboard");
 
   const { data: guides } = await supabase
     .from("guides")
-    .select("*")
+    .select("id, title, slug, summary, created_at")
     .order("created_at", { ascending: false });
 
   return (
-    <main className="min-h-screen bg-[#030814] px-6 py-8 text-white">
-      <div className="mx-auto max-w-6xl space-y-8">
-        <div className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.96),rgba(5,10,26,0.92))] p-6">
-          <p className="text-sm text-blue-300">Admin</p>
-          <h1 className="mt-2 text-3xl font-semibold">Guides</h1>
-        </div>
-
-        <AdminSubnav />
-
-        <section className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6">
-          <h2 className="text-2xl font-semibold">Add New Guide</h2>
-
-          <form action={addGuide} className="mt-6 grid gap-4">
-            <input
-              name="title"
-              placeholder="Guide title"
-              className="rounded-2xl border border-white/10 bg-[#030814] px-4 py-3"
-            />
-            <input
-              name="slug"
-              placeholder="guide-slug"
-              className="rounded-2xl border border-white/10 bg-[#030814] px-4 py-3"
-            />
-            <input
-              name="summary"
-              placeholder="Short summary"
-              className="rounded-2xl border border-white/10 bg-[#030814] px-4 py-3"
-            />
-            <textarea
-              name="content"
-              placeholder="Guide content"
-              rows={6}
-              className="rounded-2xl border border-white/10 bg-[#030814] px-4 py-3"
-            />
-            <button className="rounded-2xl bg-blue-600 px-4 py-3 font-medium hover:bg-blue-500">
-              Add Guide
-            </button>
-          </form>
-        </section>
-
-        <section className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6">
-          <h2 className="text-2xl font-semibold">Edit Existing Guides</h2>
-
-          <div className="mt-6 space-y-6">
-            {guides?.map((guide) => (
-              <div
-                key={guide.id}
-                className="rounded-[24px] border border-white/10 bg-[#030814] p-5"
-              >
-                <form action={updateGuide} className="grid gap-4">
-                  <input type="hidden" name="id" value={guide.id} />
-                  <input
-                    name="title"
-                    defaultValue={guide.title}
-                    className="rounded-2xl border border-white/10 bg-[#071021] px-4 py-3"
-                  />
-                  <input
-                    name="slug"
-                    defaultValue={guide.slug}
-                    className="rounded-2xl border border-white/10 bg-[#071021] px-4 py-3"
-                  />
-                  <input
-                    name="summary"
-                    defaultValue={guide.summary ?? ""}
-                    className="rounded-2xl border border-white/10 bg-[#071021] px-4 py-3"
-                  />
-                  <textarea
-                    name="content"
-                    defaultValue={guide.content ?? ""}
-                    rows={6}
-                    className="rounded-2xl border border-white/10 bg-[#071021] px-4 py-3"
-                  />
-                  <button className="rounded-2xl bg-blue-600 px-4 py-3 font-medium hover:bg-blue-500">
-                    Save Changes
-                  </button>
-                </form>
-
-                <form action={deleteGuide} className="mt-3">
-                  <input type="hidden" name="id" value={guide.id} />
-                  <button className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 font-medium text-red-300 hover:bg-red-500/20">
-                    Delete Guide
-                  </button>
-                </form>
-              </div>
-            ))}
+    <div className="space-y-8">
+      {/* Header */}
+      <section className="flex flex-col gap-4 rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.72),rgba(5,10,26,0.88))] px-6 py-5 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_20px_50px_rgba(0,0,0,0.22)] lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-violet-500/20 bg-violet-500/10 text-violet-300">
+            <BookOpen size={22} />
           </div>
-        </section>
-      </div>
-    </main>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Guides Library</h1>
+            <p className="mt-1 text-sm text-slate-400">
+              Training, walkthroughs and setup guides for members.
+            </p>
+          </div>
+        </div>
+        <div className="rounded-full border border-white/10 bg-[#0a1228] px-4 py-2 text-sm">
+          <span className="text-slate-500">Total guides: </span>
+          <span className="font-semibold text-white">{guides?.length ?? 0}</span>
+        </div>
+      </section>
+
+      {/* Guides grid */}
+      {!guides || guides.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.72),rgba(5,10,26,0.88))] py-20 text-center">
+          <BookOpen size={36} className="mb-4 text-slate-600" />
+          <p className="text-lg font-semibold text-white">No guides yet</p>
+          <p className="mt-2 text-sm text-slate-400">
+            Check back soon — guides will appear here as they're added.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {guides.map((guide) => (
+            <Link
+              key={guide.id}
+              href={`/guides/${guide.slug}`}
+              className="group flex flex-col rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-6 transition duration-300 hover:-translate-y-1 hover:border-blue-400/30 hover:shadow-[0_20px_50px_rgba(30,64,175,0.14)]"
+            >
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl border border-violet-500/20 bg-violet-500/10 text-violet-300">
+                <BookOpen size={18} />
+              </div>
+
+              <h2 className="text-lg font-semibold leading-tight text-white">
+                {guide.title}
+              </h2>
+
+              {guide.summary && (
+                <p className="mt-3 flex-1 text-sm text-slate-400 leading-relaxed">
+                  {guide.summary}
+                </p>
+              )}
+
+              <div className="mt-5 flex items-center gap-1.5 text-sm font-medium text-blue-400 transition group-hover:text-blue-300">
+                Read guide
+                <ArrowRight size={14} className="transition group-hover:translate-x-0.5" />
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

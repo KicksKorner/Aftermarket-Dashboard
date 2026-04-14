@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   Package, CheckSquare, Coins, PoundSterling, TrendingUp, Lock,
-  LayoutDashboard, ShoppingCart, Tag, Receipt,
+  LayoutDashboard, ShoppingCart, Tag, Receipt, Boxes,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import AddItemModal from "@/components/inventory/AddItemModal";
@@ -15,6 +15,7 @@ import BulkImportModal from "@/components/inventory/BulkImportModal";
 import EbayTab from "@/components/inventory/EbayTab";
 import VintedTab from "@/components/inventory/VintedTab";
 import ReceiptHubTab from "@/components/inventory/ReceiptHubTab";
+import SalesCardModal from "@/components/inventory/SalesCardModal";
 import {
   InventoryItem, InventorySale, calculateProfit, calculateROI,
   getInventoryStats, getMonthlyProfitDataFromSales, getYearToDateStatsFromSales,
@@ -24,7 +25,7 @@ import {
 const supabase = createClient();
 type FilterType = "all" | "in_stock" | "sold";
 type SaleWithBuyPrice = InventorySale & { buy_price_per_unit: number };
-type TabType = "overview" | "ebay" | "vinted" | "receipts";
+type TabType = "overview" | "inventory" | "ebay" | "vinted" | "receipts";
 
 export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -39,6 +40,16 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [, setNowTick] = useState(Date.now());
+  const [notes, setNotes] = useState("");
+  const [notesSaved, setNotesSaved] = useState(false);
+  const [notesLoading, setNotesLoading] = useState(true);
+  const [showSalesCard, setShowSalesCard] = useState(false);
+  const [salesCardItem, setSalesCardItem] = useState<{
+    id: string;
+    item_name: string;
+    buy_price: number;
+    sold_price: number;
+  } | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setNowTick(Date.now()), 60 * 60 * 1000);
@@ -59,7 +70,27 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { fetchData(); }, []);
+  const fetchNotes = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setNotesLoading(false); return; }
+    const { data } = await supabase
+      .from("profiles")
+      .select("quick_notes")
+      .eq("id", user.id)
+      .single();
+    setNotes(data?.quick_notes ?? "");
+    setNotesLoading(false);
+  }, []);
+
+  useEffect(() => { fetchData(); fetchNotes(); }, [fetchNotes]);
+
+  async function handleSaveNotes() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from("profiles").update({ quick_notes: notes }).eq("id", user.id);
+    setNotesSaved(true);
+    setTimeout(() => setNotesSaved(false), 2000);
+  }
 
   const salesWithBuyPrice = useMemo<SaleWithBuyPrice[]>(() => {
     const m = new Map(items.map((i) => [i.id, i]));
@@ -108,6 +139,17 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
   function handleOpenEditModal(item: InventoryItem) { setSelectedItem(item); setShowEditModal(true); }
   function handleCloseEditModal() { setSelectedItem(null); setShowEditModal(false); }
 
+  function handleOpenSalesCard(item: InventoryItem) {
+    if (!item.sold_price) return;
+    setSalesCardItem({
+      id: item.id,
+      item_name: item.item_name,
+      buy_price: Number(item.buy_price),
+      sold_price: Number(item.sold_price),
+    });
+    setShowSalesCard(true);
+  }
+
   async function handleDeleteItem(item: InventoryItem) {
     if (!window.confirm(`Delete "${item.item_name}"?`)) return;
     const { error } = await supabase.from("inventory_items").delete().eq("id", item.id);
@@ -141,6 +183,7 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
 
   const tabs = [
     { id: "overview" as TabType, label: "Overview", icon: LayoutDashboard, premiumOnly: false },
+    { id: "inventory" as TabType, label: "Inventory", icon: Boxes, premiumOnly: false },
     { id: "ebay" as TabType, label: "eBay", icon: ShoppingCart, premiumOnly: true },
     { id: "vinted" as TabType, label: "Vinted", icon: Tag, premiumOnly: true },
     { id: "receipts" as TabType, label: "Receipt Hub", icon: Receipt, premiumOnly: true },
@@ -149,6 +192,7 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
   return (
     <>
       <div className="space-y-8">
+        {/* Stat cards */}
         <section>
           <div className="mb-5 flex items-center gap-2">
             <span className="text-blue-400">📦</span>
@@ -171,8 +215,8 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
           </div>
         </section>
 
+        {/* Tabs */}
         <section className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.72),rgba(5,10,26,0.88))] p-6">
-          {/* Tab nav */}
           <div className="mb-6 flex flex-wrap gap-2 border-b border-white/10 pb-4">
             {tabs.map(({ id, label, icon: Icon, premiumOnly }) => {
               const isActive = activeTab === id;
@@ -190,28 +234,67 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
             })}
           </div>
 
-          {/* Overview tab */}
+          {/* ── OVERVIEW TAB ── */}
           {activeTab === "overview" && (
-            <>
-              <div className="mb-6 grid gap-4 xl:grid-cols-3">
-                <div className="xl:col-span-2"><MonthlyProfitChart data={monthlyProfitData} /></div>
-                <div className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.72),rgba(5,10,26,0.88))] p-6">
-                  <div className="mb-4 flex items-center gap-2"><span className="text-lg">📅</span><h2 className="text-xl font-semibold">{yearToDateStats.year} Year to Date</h2></div>
-                  <div className="space-y-4">
-                    <div className="rounded-[18px] border border-white/10 bg-white/5 p-4">
-                      <div className="text-xs uppercase tracking-[0.22em] text-slate-500">YTD Sales</div>
-                      <div className="mt-3 text-3xl font-semibold">£{yearToDateStats.ytdSales.toFixed(2)}</div>
+            <div className="space-y-6">
+              <div className="grid gap-4 xl:grid-cols-3">
+                <div className="xl:col-span-2">
+                  <MonthlyProfitChart data={monthlyProfitData} />
+                </div>
+                <div className="rounded-[20px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.72),rgba(5,10,26,0.88))] p-5">
+                  <div className="mb-3 flex items-center gap-2"><span>📅</span><h2 className="text-base font-semibold">{yearToDateStats.year} Year to Date</h2></div>
+                  <div className="space-y-3">
+                    <div className="rounded-[16px] border border-white/10 bg-white/5 p-3">
+                      <div className="text-xs uppercase tracking-[0.2em] text-slate-500">YTD Sales</div>
+                      <div className="mt-2 text-2xl font-semibold">£{yearToDateStats.ytdSales.toFixed(2)}</div>
                     </div>
-                    <div className="rounded-[18px] border border-white/10 bg-white/5 p-4">
-                      <div className="text-xs uppercase tracking-[0.22em] text-slate-500">YTD Profit</div>
-                      <div className={`mt-3 text-3xl font-semibold ${yearToDateStats.ytdProfit >= 0 ? "text-emerald-300" : "text-red-300"}`}>£{yearToDateStats.ytdProfit.toFixed(2)}</div>
+                    <div className="rounded-[16px] border border-white/10 bg-white/5 p-3">
+                      <div className="text-xs uppercase tracking-[0.2em] text-slate-500">YTD Profit</div>
+                      <div className={`mt-2 text-2xl font-semibold ${yearToDateStats.ytdProfit >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                        £{yearToDateStats.ytdProfit.toFixed(2)}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
+              {/* Quick Notes */}
+              <div className="rounded-[20px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">📝</span>
+                    <h3 className="text-base font-semibold text-white">Quick Notes</h3>
+                  </div>
+                  <button
+                    onClick={handleSaveNotes}
+                    className={`rounded-xl px-4 py-1.5 text-sm font-medium transition ${
+                      notesSaved
+                        ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                        : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    }`}
+                  >
+                    {notesSaved ? "Saved ✓" : "Save"}
+                  </button>
+                </div>
+                <textarea
+                  value={notesLoading ? "" : notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Jot down leads, items to look out for, reminders..."
+                  rows={4}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 resize-none focus:border-blue-400/30"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* ── INVENTORY TAB ── */}
+          {activeTab === "inventory" && (
+            <>
               <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div><h2 className="text-xl font-semibold">Inventory Items</h2><p className="mt-1 text-sm text-slate-400">View and manage your tracked items.</p></div>
+                <div>
+                  <h2 className="text-xl font-semibold">Inventory Items</h2>
+                  <p className="mt-1 text-sm text-slate-400">View and manage your tracked items.</p>
+                </div>
                 <div className="flex flex-wrap gap-3">
                   <button onClick={() => setActiveFilter("all")} className={filterBtn("all")}>All</button>
                   <button onClick={() => setActiveFilter("in_stock")} className={filterBtn("in_stock")}>In Stock</button>
@@ -309,7 +392,17 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
                             <td className="px-4 py-4">
                               <div className="flex flex-wrap gap-2">
                                 <button onClick={() => handleOpenEditModal(item)} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:bg-white/10">Edit</button>
-                                {Number(item.quantity_remaining) > 0 && <button onClick={() => handleOpenSoldModal(item)} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:bg-white/10">Mark Sold</button>}
+                                {Number(item.quantity_remaining) > 0 && (
+                                  <button onClick={() => handleOpenSoldModal(item)} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:bg-white/10">Mark Sold</button>
+                                )}
+                                {isSoldOut && item.sold_price !== null && (
+                                  <button
+                                    onClick={() => handleOpenSalesCard(item)}
+                                    className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/20"
+                                  >
+                                    Sales Card
+                                  </button>
+                                )}
                                 <button onClick={() => handleDeleteItem(item)} className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300 hover:bg-red-500/20">Delete</button>
                               </div>
                             </td>
@@ -323,12 +416,10 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
             </>
           )}
 
-          {/* Premium-locked tab overlay */}
+          {/* Premium-locked overlay */}
           {(activeTab === "ebay" || activeTab === "vinted" || activeTab === "receipts") && !isPremium && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-400">
-                <Lock size={24} />
-              </div>
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-400"><Lock size={24} /></div>
               <h3 className="text-xl font-semibold text-white">Premium Feature</h3>
               <p className="mt-2 max-w-sm text-sm text-slate-400">
                 {activeTab === "ebay" && "Connect your eBay account to sync sales automatically and match them to your inventory."}
@@ -350,6 +441,11 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
       <EditItemModal open={showEditModal} onClose={handleCloseEditModal} onSuccess={fetchData} item={selectedItem} />
       <ExportCsvModal open={showExportModal} onClose={() => setShowExportModal(false)} sales={salesWithBuyPrice} />
       <BulkImportModal open={showBulkImportModal} onClose={() => setShowBulkImportModal(false)} onSuccess={fetchData} />
+      <SalesCardModal
+        open={showSalesCard}
+        onClose={() => { setShowSalesCard(false); setSalesCardItem(null); }}
+        sale={salesCardItem}
+      />
     </>
   );
 }

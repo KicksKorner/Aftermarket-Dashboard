@@ -5,25 +5,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
-  LayoutDashboard,
-  BookOpen,
-  Shield,
-  LogOut,
-  Boxes,
-  Receipt,
-  Mail,
-  Footprints,
-  Menu,
-  X,
-  Lock,
-  ShoppingBag,
-  Calculator,
+  LayoutDashboard, BookOpen, Shield, LogOut, Boxes,
+  Receipt, Mail, Footprints, Menu, X, Lock, ShoppingBag, Calculator, Ticket,
 } from "lucide-react";
 
-type SidebarProps = {
-  role: string;
-  email: string;
-};
+type SidebarProps = { role: string; email: string; };
 
 type NavItem = {
   href: string;
@@ -37,26 +23,13 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  {
-    href: "/dashboard/sole-scan",
-    label: "Sole Scan",
-    icon: Footprints,
-    startsWith: true,
-    premiumLocked: true,
-    lockedHref: "/upgrade",
-  },
-  {
-    href: "/dashboard/vinted-bot",
-    label: "Vinted Bot",
-    icon: ShoppingBag,
-    startsWith: true,
-    premiumLocked: true,
-    lockedHref: "/vinted-bot",
-  },
+  { href: "/dashboard/sole-scan", label: "Sole Scan", icon: Footprints, startsWith: true, premiumLocked: true, lockedHref: "/upgrade" },
+  { href: "/dashboard/vinted-bot", label: "Vinted Bot", icon: ShoppingBag, startsWith: true, premiumLocked: true, lockedHref: "/vinted-bot" },
   { href: "/dashboard/inventory", label: "AIO Tracker", icon: Boxes, startsWith: true },
   { href: "/dashboard/expenses", label: "Expenses", icon: Receipt, startsWith: true },
   { href: "/dashboard/gmail-sync", label: "Gmail Sync", icon: Mail, startsWith: true },
   { href: "/dashboard/profit-calculator", label: "Profit Calculator", icon: Calculator, startsWith: true },
+  { href: "/dashboard/tickets", label: "Tickets", icon: Ticket, startsWith: true },
   { href: "/guides", label: "Guides", icon: BookOpen },
   { href: "/admin", label: "Admin", icon: Shield, adminOnly: true },
 ];
@@ -67,29 +40,14 @@ const roleBadgeClass: Record<string, string> = {
   member: "border-emerald-400/20 bg-emerald-500/10 text-emerald-300",
 };
 
-function SidebarContent({
-  role,
-  email,
-  pathname,
-  onNavigate,
-}: {
-  role: string;
-  email: string;
-  pathname: string;
-  onNavigate?: () => void;
-}) {
-  const baseItem =
-    "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition";
-  const activeItem =
-    "border border-white/10 bg-white/10 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)]";
+function SidebarContent({ role, email, pathname, onNavigate }: { role: string; email: string; pathname: string; onNavigate?: () => void; }) {
+  const baseItem = "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition";
+  const activeItem = "border border-white/10 bg-white/10 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)]";
   const inactiveItem = "text-slate-300 hover:bg-white/5 hover:text-white";
   const lockedItem = "text-slate-500 cursor-pointer hover:bg-white/5";
-
   const isUnlocked = role === "premium" || role === "admin";
 
-  const filteredItems = useMemo(() => {
-    return navItems.filter((item) => !item.adminOnly || role === "admin");
-  }, [role]);
+  const filteredItems = useMemo(() => navItems.filter((item) => !item.adminOnly || role === "admin"), [role]);
 
   return (
     <div className="flex h-full flex-col">
@@ -112,34 +70,17 @@ function SidebarContent({
       <nav className="space-y-2">
         {filteredItems.map((item) => {
           const Icon = item.icon;
-          const isActive = item.startsWith
-            ? pathname.startsWith(item.href)
-            : pathname === item.href;
-
+          const isActive = item.startsWith ? pathname.startsWith(item.href) : pathname === item.href;
           if (item.premiumLocked && !isUnlocked) {
             return (
-              <Link
-                key={item.href}
-                href={item.lockedHref ?? "/upgrade"}
-                onClick={onNavigate}
-                className={`${baseItem} ${lockedItem}`}
-              >
-                <Icon size={18} />
-                <span className="flex-1">{item.label}</span>
-                <Lock size={13} className="text-slate-600" />
+              <Link key={item.href} href={item.lockedHref ?? "/upgrade"} onClick={onNavigate} className={`${baseItem} ${lockedItem}`}>
+                <Icon size={18} /><span className="flex-1">{item.label}</span><Lock size={13} className="text-slate-600" />
               </Link>
             );
           }
-
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              className={`${baseItem} ${isActive ? activeItem : inactiveItem}`}
-            >
-              <Icon size={18} />
-              {item.label}
+            <Link key={item.href} href={item.href} onClick={onNavigate} className={`${baseItem} ${isActive ? activeItem : inactiveItem}`}>
+              <Icon size={18} />{item.label}
             </Link>
           );
         })}
@@ -148,8 +89,7 @@ function SidebarContent({
       <div className="mt-auto pt-8">
         <form action="/auth/signout" method="post">
           <button className="flex w-full items-center gap-3 rounded-2xl border border-blue-500/20 bg-blue-600/15 px-4 py-3 text-sm font-medium text-white transition hover:bg-blue-600/25">
-            <LogOut size={18} />
-            Logout
+            <LogOut size={18} />Logout
           </button>
         </form>
       </div>
@@ -172,9 +112,7 @@ export default function Sidebar({ role, email }: SidebarProps) {
               <p className="text-base font-semibold leading-tight text-white">Members Area</p>
             </div>
           </div>
-          <button type="button" onClick={() => setOpen(true)}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white"
-            aria-label="Open menu">
+          <button type="button" onClick={() => setOpen(true)} className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white" aria-label="Open menu">
             <Menu size={20} />
           </button>
         </div>
@@ -196,9 +134,7 @@ export default function Sidebar({ role, email }: SidebarProps) {
                   <p className="text-lg font-semibold text-white">Members Area</p>
                 </div>
               </div>
-              <button type="button" onClick={() => setOpen(false)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white"
-                aria-label="Close menu">
+              <button type="button" onClick={() => setOpen(false)} className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white" aria-label="Close menu">
                 <X size={18} />
               </button>
             </div>
