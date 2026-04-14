@@ -1,12 +1,9 @@
 "use client";
 
-import TopTrackedProductsOverview from "@/components/TopTrackedProductsOverview";
 import DashboardPerformance from "@/components/DashboardPerformance";
 import Link from "next/link";
 import {
   BookOpen,
-  Link as LinkIcon,
-  Shield,
   Video,
   Boxes,
   Receipt,
@@ -52,14 +49,6 @@ const featureCards = [
     iconClasses: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
   },
   {
-    title: "Amazon Invites",
-    subtitle: "Invite Only Products",
-    href: "/links",
-    icon: LinkIcon,
-    iconClasses:
-      "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
-  },
-  {
     title: "Guides Library",
     subtitle: "Training and walkthroughs",
     href: "/guides",
@@ -72,13 +61,6 @@ const featureCards = [
     href: "/guides",
     icon: Video,
     iconClasses: "border-blue-500/20 bg-blue-500/10 text-blue-300",
-  },
-  {
-    title: "Admin Panel",
-    subtitle: "Manage content and tools",
-    href: "/admin",
-    icon: Shield,
-    iconClasses: "border-amber-500/20 bg-amber-500/10 text-amber-300",
   },
 ];
 
@@ -109,10 +91,6 @@ export default function DashboardPage() {
       </section>
 
       <section>
-        <TopTrackedProductsOverview />
-      </section>
-
-      <section>
         <DashboardPerformance />
       </section>
 
@@ -122,7 +100,7 @@ export default function DashboardPage() {
           <h2>Premium Features</h2>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {featureCards.map((card) => {
             const Icon = card.icon;
 

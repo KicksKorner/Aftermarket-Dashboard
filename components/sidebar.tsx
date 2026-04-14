@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   LayoutDashboard,
-  Link as LinkIcon,
   BookOpen,
   Shield,
   LogOut,
@@ -17,9 +16,7 @@ import {
   Menu,
   X,
   Send,
-  ScanSearch,
   Webhook,
-  Search,
 } from "lucide-react";
 
 type SidebarProps = {
@@ -60,18 +57,6 @@ const navItems: NavItem[] = [
     startsWith: true,
   },
   {
-    href: "/dashboard/card-grading",
-    label: "Card Grading",
-    icon: ScanSearch,
-    startsWith: true,
-  },
-  {
-    href: "/dashboard/pokemon-sku",
-    label: "Pokemon SKU",
-    icon: Search,
-    startsWith: true,
-  },
-  {
     href: "/dashboard/inventory",
     label: "Inventory Tracker",
     icon: Boxes,
@@ -88,11 +73,6 @@ const navItems: NavItem[] = [
     label: "Gmail Sync",
     icon: Mail,
     startsWith: true,
-  },
-  {
-    href: "/links",
-    label: "Amazon Invites",
-    icon: LinkIcon,
   },
   {
     href: "/guides",
@@ -138,7 +118,6 @@ function SidebarContent({
           height={42}
           className="rounded-lg"
         />
-
         <div>
           <p className="text-xs text-blue-300">Aftermarket Arbitrage</p>
           <h1 className="text-xl font-semibold tracking-tight">Members Area</h1>
