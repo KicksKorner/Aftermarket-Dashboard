@@ -29,6 +29,7 @@ const navItems: NavItem[] = [
   { href: "/dashboard/inventory", label: "AIO Tracker", icon: Boxes, startsWith: true },
   { href: "/dashboard/expenses", label: "Expenses", icon: Receipt, startsWith: true },
   { href: "/dashboard/profit-calculator", label: "Profit Calculator", icon: Calculator, startsWith: true },
+  { href: "/dashboard/vat-tracker", label: "VAT Tracker", icon: PoundSterling, startsWith: true },
   { href: "/dashboard/tickets", label: "Tickets", icon: Ticket, startsWith: true },
   { href: "/guides", label: "Guides", icon: BookOpen },
   { href: "/admin", label: "Admin", icon: Shield, adminOnly: true },
