@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { ShoppingCart, RefreshCw, Unlink, CheckCircle, AlertCircle, Package } from "lucide-react";
+import { ShoppingCart, RefreshCw, Unlink, CheckCircle, AlertCircle, Package, Link2 } from "lucide-react";
 
 const supabase = createClient();
 
@@ -17,30 +17,50 @@ type EbaySale = {
   matched_inventory_id: string | null;
 };
 
+type InventoryItem = {
+  id: string;
+  item_name: string;
+  quantity_remaining: number;
+  buy_price: number;
+};
+
 type ConnectionStatus = "loading" | "connected" | "disconnected";
 
 export default function EbayTab() {
   const [status, setStatus] = useState<ConnectionStatus>("loading");
   const [sales, setSales] = useState<EbaySale[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [matching, setMatching] = useState<string | null>(null);
+  const [selectedMatch, setSelectedMatch] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    checkConnection();
-
-    // Handle redirect back from eBay OAuth
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("ebay") === "connected") {
-      setSyncResult("eBay account connected successfully.");
-      window.history.replaceState({}, "", window.location.pathname);
-    } else if (params.get("ebay") === "error") {
-      setSyncResult("Failed to connect eBay. Please try again.");
-      window.history.replaceState({}, "", window.location.pathname);
-    }
+  const fetchSales = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from("ebay_sales")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("sold_date", { ascending: false })
+      .limit(100);
+    setSales((data || []) as EbaySale[]);
   }, []);
 
-  async function checkConnection() {
+  const fetchInventory = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from("inventory_items")
+      .select("id, item_name, quantity_remaining, buy_price")
+      .eq("user_id", user.id)
+      .gt("quantity_remaining", 0)
+      .order("item_name", { ascending: true });
+    setInventoryItems((data || []) as InventoryItem[]);
+  }, []);
+
+  const checkConnection = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setStatus("disconnected"); return; }
 
@@ -51,22 +71,23 @@ export default function EbayTab() {
       .single();
 
     setStatus(data ? "connected" : "disconnected");
-    if (data) fetchSales();
-  }
+    if (data) {
+      fetchSales();
+      fetchInventory();
+    }
+  }, [fetchSales, fetchInventory]);
 
-  async function fetchSales() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data } = await supabase
-      .from("ebay_sales")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("sold_date", { ascending: false })
-      .limit(50);
-
-    setSales((data || []) as EbaySale[]);
-  }
+  useEffect(() => {
+    checkConnection();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("ebay") === "connected") {
+      setSyncResult("eBay account connected successfully.");
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (params.get("ebay") === "error") {
+      setSyncResult("Failed to connect eBay. Please try again.");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [checkConnection]);
 
   async function handleSync() {
     setSyncing(true);
@@ -77,6 +98,7 @@ export default function EbayTab() {
       if (res.ok) {
         setSyncResult(`Synced ${data.synced} order(s). ${data.matched} matched to inventory.`);
         fetchSales();
+        fetchInventory();
       } else {
         setSyncResult(data.error || "Sync failed.");
       }
@@ -93,6 +115,60 @@ export default function EbayTab() {
     await fetch("/api/ebay/disconnect", { method: "POST" });
     setStatus("disconnected");
     setDisconnecting(false);
+  }
+
+  async function handleManualMatch(sale: EbaySale) {
+    const inventoryId = selectedMatch[sale.id];
+    if (!inventoryId) return;
+
+    setMatching(sale.id);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setMatching(null); return; }
+
+    const inventoryItem = inventoryItems.find((i) => i.id === inventoryId);
+    if (!inventoryItem) { setMatching(null); return; }
+
+    const qty = Number(sale.quantity_sold) || 1;
+    const newRemaining = Math.max(0, Number(inventoryItem.quantity_remaining) - qty);
+    const soldDate = new Date(sale.sold_date).toISOString().split("T")[0];
+
+    // Create inventory sale record
+    await supabase.from("inventory_sales").insert({
+      user_id: user.id,
+      inventory_item_id: inventoryItem.id,
+      item_name: inventoryItem.item_name,
+      quantity_sold: qty,
+      sold_price: Number(sale.sale_price),
+      fees: 0,
+      shipping: 0,
+      sold_date: soldDate,
+    });
+
+    // Update inventory item
+    await supabase.from("inventory_items").update({
+      quantity_remaining: newRemaining,
+      status: newRemaining === 0 ? "sold" : "in_stock",
+      sold_price: Number(sale.sale_price),
+      sold_date: soldDate,
+    }).eq("id", inventoryItem.id);
+
+    // Update ebay_sale with the matched inventory id
+    await supabase.from("ebay_sales").update({
+      matched_inventory_id: inventoryId,
+      auto_matched: false,
+    }).eq("id", sale.id);
+
+    // Clear selection and refresh
+    setSelectedMatch((prev) => {
+      const next = { ...prev };
+      delete next[sale.id];
+      return next;
+    });
+
+    setSyncResult(`Matched "${sale.item_title}" → "${inventoryItem.item_name}" and marked as sold.`);
+    fetchSales();
+    fetchInventory();
+    setMatching(null);
   }
 
   if (status === "loading") {
@@ -113,20 +189,11 @@ export default function EbayTab() {
         <p className="mt-2 max-w-sm text-sm text-slate-400">
           Click "Connect eBay" to link your account and start syncing sales. Matched sales will automatically update your inventory.
         </p>
-        <a
-          href="/api/ebay/connect"
-          className="mt-6 flex items-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-500"
-        >
+        <a href="/api/ebay/connect"
+          className="mt-6 flex items-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-500">
           <ShoppingCart size={16} />
           Connect eBay Account
         </a>
-        <p className="mt-4 text-xs text-slate-600">
-          By connecting your eBay account, you agree to our{" "}
-          <span className="text-blue-400 underline cursor-pointer">Terms of Service</span> and{" "}
-          <span className="text-blue-400 underline cursor-pointer">Privacy Policy</span>,
-          including the collection and processing of your eBay sales data.
-        </p>
-
         {syncResult && (
           <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm text-red-300">
             {syncResult}
@@ -136,6 +203,8 @@ export default function EbayTab() {
     );
   }
 
+  const unmatchedCount = sales.filter((s) => !s.matched_inventory_id).length;
+
   return (
     <div className="space-y-5">
       {/* Connected header */}
@@ -144,25 +213,18 @@ export default function EbayTab() {
           <CheckCircle size={18} className="text-emerald-400 flex-shrink-0" />
           <div>
             <p className="text-sm font-semibold text-white">eBay account connected</p>
-            <p className="text-xs text-slate-400">Sales sync automatically when you press Sync. Matched items update your inventory.</p>
+            <p className="text-xs text-slate-400">Sync pulls your last 90 days of orders. Already synced orders are never duplicated.</p>
           </div>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className="flex items-center gap-2 rounded-2xl border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-300 transition hover:bg-blue-500/20 disabled:opacity-50"
-          >
+          <button onClick={handleSync} disabled={syncing}
+            className="flex items-center gap-2 rounded-2xl border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-300 transition hover:bg-blue-500/20 disabled:opacity-50">
             <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
             {syncing ? "Syncing..." : "Sync Now"}
           </button>
-          <button
-            onClick={handleDisconnect}
-            disabled={disconnecting}
-            className="flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
-          >
-            <Unlink size={14} />
-            Disconnect
+          <button onClick={handleDisconnect} disabled={disconnecting}
+            className="flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-300 transition hover:bg-red-500/20 disabled:opacity-50">
+            <Unlink size={14} />Disconnect
           </button>
         </div>
       </div>
@@ -174,6 +236,17 @@ export default function EbayTab() {
         </div>
       )}
 
+      {/* Unmatched callout */}
+      {unmatchedCount > 0 && (
+        <div className="flex items-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          <Link2 size={14} className="flex-shrink-0" />
+          <span>
+            <span className="font-semibold">{unmatchedCount} sale{unmatchedCount > 1 ? "s" : ""} not matched to inventory.</span>{" "}
+            Use the dropdown on each row to manually link them — this will mark the matching inventory item as sold.
+          </span>
+        </div>
+      )}
+
       {/* Sales table */}
       <div className="overflow-hidden rounded-[20px] border border-white/10 bg-[#081120]/80">
         <div className="border-b border-white/10 bg-white/5 px-5 py-3 flex items-center justify-between">
@@ -181,7 +254,7 @@ export default function EbayTab() {
           <p className="text-xs text-slate-500">{sales.length} records</p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[700px] text-sm">
+          <table className="w-full min-w-[800px] text-sm">
             <thead className="border-b border-white/10 text-left text-slate-400">
               <tr>
                 <th className="px-4 py-3 font-medium">Item</th>
@@ -201,20 +274,43 @@ export default function EbayTab() {
               ) : (
                 sales.map((sale) => (
                   <tr key={sale.id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                    <td className="px-4 py-3 font-medium text-white max-w-[280px] truncate">{sale.item_title}</td>
+                    <td className="px-4 py-3 font-medium text-white max-w-[280px] truncate" title={sale.item_title}>
+                      {sale.item_title}
+                    </td>
                     <td className="px-4 py-3 text-slate-300">{sale.quantity_sold}</td>
                     <td className="px-4 py-3 text-slate-300">£{Number(sale.sale_price).toFixed(2)}</td>
                     <td className="px-4 py-3 text-slate-300">
                       {new Date(sale.sold_date).toLocaleDateString("en-GB")}
                     </td>
                     <td className="px-4 py-3">
-                      {sale.auto_matched ? (
+                      {sale.matched_inventory_id ? (
                         <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-300">
                           <Package size={10} />
-                          Auto-matched
+                          {sale.auto_matched ? "Auto-matched" : "Matched"}
                         </span>
                       ) : (
-                        <span className="text-slate-500 text-xs">Not matched</span>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={selectedMatch[sale.id] ?? ""}
+                            onChange={(e) => setSelectedMatch((prev) => ({ ...prev, [sale.id]: e.target.value }))}
+                            className="rounded-xl border border-white/10 bg-[#0d1829] px-2 py-1.5 text-xs text-white outline-none max-w-[180px]"
+                          >
+                            <option value="">Select inventory item...</option>
+                            {inventoryItems.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.item_name} ({item.quantity_remaining} left)
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => handleManualMatch(sale)}
+                            disabled={!selectedMatch[sale.id] || matching === sale.id}
+                            className="flex items-center gap-1 rounded-xl border border-blue-500/20 bg-blue-500/10 px-2.5 py-1.5 text-xs font-medium text-blue-300 hover:bg-blue-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                          >
+                            <Link2 size={11} />
+                            {matching === sale.id ? "..." : "Match"}
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
