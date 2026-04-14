@@ -13,6 +13,13 @@ async function requireAdmin() {
   return { supabase, user, isAdmin: profile?.role === "admin" };
 }
 
+function getServiceClient() {
+  return createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
+
 async function setMemberRole(formData: FormData) {
   "use server";
   const { supabase, isAdmin } = await requireAdmin();
@@ -20,13 +27,57 @@ async function setMemberRole(formData: FormData) {
   const memberId = String(formData.get("member_id") || "");
   const newRole = String(formData.get("new_role") || "");
   if (!memberId || !["member", "premium", "admin"].includes(newRole)) return;
-
-  // Upsert in case profile row doesn't exist yet
   await supabase.from("profiles").upsert(
     { id: memberId, role: newRole },
     { onConflict: "id" }
   );
+  revalidatePath("/admin/members");
+}
 
+async function banMember(formData: FormData) {
+  "use server";
+  const { user, isAdmin } = await requireAdmin();
+  if (!isAdmin) return;
+  const memberId = String(formData.get("member_id") || "");
+  if (!memberId || memberId === user?.id) return;
+
+  const service = getServiceClient();
+  // Ban by setting banned_until far in future
+  await service.auth.admin.updateUserById(memberId, {
+    ban_duration: "876000h", // 100 years
+  });
+  // Also set role to banned in profiles so we can show it
+  await service.from("profiles").update({ role: "banned" }).eq("id", memberId);
+  revalidatePath("/admin/members");
+}
+
+async function unbanMember(formData: FormData) {
+  "use server";
+  const { isAdmin } = await requireAdmin();
+  if (!isAdmin) return;
+  const memberId = String(formData.get("member_id") || "");
+  if (!memberId) return;
+
+  const service = getServiceClient();
+  await service.auth.admin.updateUserById(memberId, {
+    ban_duration: "none",
+  });
+  await service.from("profiles").update({ role: "member" }).eq("id", memberId);
+  revalidatePath("/admin/members");
+}
+
+async function deleteMember(formData: FormData) {
+  "use server";
+  const { user, isAdmin } = await requireAdmin();
+  if (!isAdmin) return;
+  const memberId = String(formData.get("member_id") || "");
+  if (!memberId || memberId === user?.id) return;
+
+  const service = getServiceClient();
+  // Delete from auth (cascade will handle profiles if FK is set up)
+  await service.auth.admin.deleteUser(memberId);
+  // Also explicitly delete profile in case no cascade
+  await service.from("profiles").delete().eq("id", memberId);
   revalidatePath("/admin/members");
 }
 
@@ -34,6 +85,7 @@ const roleBadge: Record<string, string> = {
   admin: "border-red-400/30 bg-red-500/10 text-red-300",
   premium: "border-orange-400/30 bg-orange-500/10 text-orange-300",
   member: "border-white/10 bg-white/5 text-slate-400",
+  banned: "border-red-900/40 bg-red-900/20 text-red-500",
 };
 
 export default async function AdminMembersPage() {
@@ -41,41 +93,37 @@ export default async function AdminMembersPage() {
   if (!user) redirect("/login");
   if (!isAdmin) redirect("/dashboard");
 
-  // Use service role to list all auth users so we never miss anyone
-  const serviceSupabase = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
-  const { data: authUsersData } = await serviceSupabase.auth.admin.listUsers();
+  const service = getServiceClient();
+  const { data: authUsersData } = await service.auth.admin.listUsers();
   const authUsers = authUsersData?.users ?? [];
 
-  // Get all profiles
   const { data: profiles } = await supabase
     .from("profiles")
     .select("id, email, role, created_at, discord_id, discord_username");
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
 
-  // Merge — every auth user gets a row, defaulting to member if no profile yet
   const members = authUsers.map((u) => {
     const profile = profileMap.get(u.id);
+    const isBanned = u.banned_until && new Date(u.banned_until) > new Date();
     return {
       id: u.id,
       email: u.email ?? profile?.email ?? "No email",
-      role: profile?.role ?? "member",
+      role: isBanned ? "banned" : (profile?.role ?? "member"),
       created_at: u.created_at,
       discord_id: profile?.discord_id ?? null,
       discord_username: profile?.discord_username ?? null,
       provider: u.app_metadata?.provider ?? "email",
+      isBanned: !!isBanned,
     };
   }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   const counts = {
     total: members.length,
     premium: members.filter((m) => m.role === "premium").length,
-    admin: members.filter((m) => m.role === "admin").length,
     member: members.filter((m) => m.role === "member").length,
+    admin: members.filter((m) => m.role === "admin").length,
+    banned: members.filter((m) => m.isBanned).length,
   };
 
   return (
@@ -84,18 +132,19 @@ export default async function AdminMembersPage() {
         <div className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.96),rgba(5,10,26,0.92))] p-6">
           <p className="text-sm text-blue-300">Admin</p>
           <h1 className="mt-2 text-3xl font-semibold">Members</h1>
-          <p className="mt-2 text-sm text-slate-400">Manage member roles and Premium access.</p>
+          <p className="mt-2 text-sm text-slate-400">Manage member roles, Premium access, and account status.</p>
         </div>
 
         <AdminSubnav />
 
         {/* Stats */}
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
           {[
-            { label: "Total members", value: counts.total, color: "text-white" },
+            { label: "Total", value: counts.total, color: "text-white" },
             { label: "Premium", value: counts.premium, color: "text-orange-300" },
             { label: "Member", value: counts.member, color: "text-slate-300" },
             { label: "Admin", value: counts.admin, color: "text-red-300" },
+            { label: "Banned", value: counts.banned, color: "text-red-500" },
           ].map((stat) => (
             <div key={stat.label} className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-5">
               <p className="text-xs uppercase tracking-[0.12em] text-slate-500">{stat.label}</p>
@@ -115,18 +164,22 @@ export default async function AdminMembersPage() {
             {members.map((member) => (
               <div
                 key={member.id}
-                className="flex flex-col gap-4 rounded-[20px] border border-white/8 bg-[#030814] p-4 sm:flex-row sm:items-center sm:justify-between"
+                className={`flex flex-col gap-4 rounded-[20px] border bg-[#030814] p-4 sm:flex-row sm:items-center sm:justify-between ${
+                  member.isBanned ? "border-red-900/30 bg-red-950/20" : "border-white/8"
+                }`}
               >
                 <div className="flex items-center gap-3">
-                  {/* Avatar */}
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold uppercase text-slate-300">
+                  <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border text-sm font-semibold uppercase ${
+                    member.isBanned ? "border-red-900/30 bg-red-900/20 text-red-500" : "border-white/10 bg-white/5 text-slate-300"
+                  }`}>
                     {member.discord_username?.[0] ?? member.email?.[0] ?? "?"}
                   </div>
 
                   <div>
-                    <p className="text-sm font-medium text-white">{member.email}</p>
+                    <p className={`text-sm font-medium ${member.isBanned ? "text-slate-500" : "text-white"}`}>
+                      {member.email}
+                    </p>
 
-                    {/* Discord username */}
                     {member.discord_username && (
                       <p className="mt-0.5 flex items-center gap-1.5 text-xs text-[#5865F2]">
                         <svg width="11" height="11" viewBox="0 0 127.14 96.36" fill="currentColor">
@@ -138,14 +191,10 @@ export default async function AdminMembersPage() {
 
                     <div className="mt-0.5 flex items-center gap-2">
                       <p className="text-xs text-slate-500">
-                        Joined{" "}
-                        {member.created_at
-                          ? new Date(member.created_at).toLocaleDateString("en-GB", {
-                              day: "numeric", month: "short", year: "numeric",
-                            })
+                        Joined {member.created_at
+                          ? new Date(member.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
                           : "Unknown"}
                       </p>
-                      {/* Provider badge */}
                       <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
                         member.provider === "discord"
                           ? "border-[#5865F2]/30 bg-[#5865F2]/10 text-[#7289da]"
@@ -157,49 +206,78 @@ export default async function AdminMembersPage() {
                   </div>
                 </div>
 
-                {/* Role + actions */}
-                <div className="flex flex-wrap items-center gap-3">
+                {/* Role + action buttons */}
+                <div className="flex flex-wrap items-center gap-2">
                   <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] ${roleBadge[member.role] ?? roleBadge.member}`}>
-                    {member.role ?? "member"}
+                    {member.role}
                   </span>
 
-                  {member.id !== user.id ? (
-                    <form action={setMemberRole} className="flex flex-wrap gap-2">
-                      <input type="hidden" name="member_id" value={member.id} />
-
-                      {member.role === "member" && (
-                        <button name="new_role" value="premium"
-                          className="rounded-2xl border border-orange-500/20 bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-300 transition hover:bg-orange-500/20">
-                          Grant Premium
-                        </button>
-                      )}
-                      {member.role === "premium" && (
-                        <>
-                          <button name="new_role" value="member"
-                            className="rounded-2xl border border-slate-500/20 bg-slate-500/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-slate-500/20">
-                            Revoke Premium
-                          </button>
-                          <button name="new_role" value="admin"
-                            className="rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/20">
-                            Make Admin
-                          </button>
-                        </>
-                      )}
-                      {member.role === "member" && (
-                        <button name="new_role" value="admin"
-                          className="rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/20">
-                          Make Admin
-                        </button>
-                      )}
-                      {member.role === "admin" && (
-                        <button name="new_role" value="member"
-                          className="rounded-2xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-400 transition hover:bg-white/10">
-                          Remove Admin
-                        </button>
-                      )}
-                    </form>
-                  ) : (
+                  {member.id === user.id ? (
                     <span className="text-xs text-slate-600">(you)</span>
+                  ) : (
+                    <>
+                      {/* Role buttons */}
+                      {!member.isBanned && (
+                        <form action={setMemberRole} className="flex flex-wrap gap-2">
+                          <input type="hidden" name="member_id" value={member.id} />
+                          {member.role === "member" && (
+                            <button name="new_role" value="premium"
+                              className="rounded-2xl border border-orange-500/20 bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-300 transition hover:bg-orange-500/20">
+                              Grant Premium
+                            </button>
+                          )}
+                          {member.role === "premium" && (
+                            <button name="new_role" value="member"
+                              className="rounded-2xl border border-slate-500/20 bg-slate-500/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-slate-500/20">
+                              Revoke Premium
+                            </button>
+                          )}
+                          {member.role !== "admin" && (
+                            <button name="new_role" value="admin"
+                              className="rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/20">
+                              Make Admin
+                            </button>
+                          )}
+                          {member.role === "admin" && (
+                            <button name="new_role" value="member"
+                              className="rounded-2xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-400 transition hover:bg-white/10">
+                              Remove Admin
+                            </button>
+                          )}
+                        </form>
+                      )}
+
+                      {/* Ban / Unban */}
+                      {!member.isBanned ? (
+                        <form action={banMember}>
+                          <input type="hidden" name="member_id" value={member.id} />
+                          <button
+                            className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-300 transition hover:bg-amber-500/20"
+                            onClick={(e) => { if (!confirm(`Ban ${member.email}? They will not be able to log in.`)) e.preventDefault(); }}
+                          >
+                            Ban
+                          </button>
+                        </form>
+                      ) : (
+                        <form action={unbanMember}>
+                          <input type="hidden" name="member_id" value={member.id} />
+                          <button className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/20">
+                            Unban
+                          </button>
+                        </form>
+                      )}
+
+                      {/* Delete */}
+                      <form action={deleteMember}>
+                        <input type="hidden" name="member_id" value={member.id} />
+                        <button
+                          className="rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/20"
+                          onClick={(e) => { if (!confirm(`Permanently delete ${member.email}? This cannot be undone.`)) e.preventDefault(); }}
+                        >
+                          Delete
+                        </button>
+                      </form>
+                    </>
                   )}
                 </div>
               </div>
