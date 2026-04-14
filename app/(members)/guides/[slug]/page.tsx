@@ -3,94 +3,61 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, BookOpen } from "lucide-react";
 
+type Props = {
+  params: Promise<{ slug: string }>;
+};
+
+function formatInline(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
+    .replace(/`(.+?)`/g, '<code class="rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-xs font-mono text-blue-300">$1</code>');
+}
+
 function renderContent(content: string) {
   const lines = content.split("\n");
   const elements: React.ReactNode[] = [];
   let key = 0;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // H2
+  for (const line of lines) {
     if (line.startsWith("## ")) {
       elements.push(
-        <h2 key={key++} className="mt-8 mb-3 text-xl font-semibold text-white first:mt-0">
+        <h2 key={key++} className="mt-8 mb-3 text-xl font-semibold text-white">
           {line.replace("## ", "")}
         </h2>
       );
-      continue;
-    }
-
-    // H3
-    if (line.startsWith("### ")) {
+    } else if (line.startsWith("### ")) {
       elements.push(
         <h3 key={key++} className="mt-6 mb-2 text-base font-semibold text-white">
           {line.replace("### ", "")}
         </h3>
       );
-      continue;
-    }
-
-    // Horizontal rule
-    if (line.trim() === "---") {
-      elements.push(
-        <hr key={key++} className="my-6 border-white/10" />
-      );
-      continue;
-    }
-
-    // Bullet points
-    if (line.startsWith("- ")) {
+    } else if (line.trim() === "---") {
+      elements.push(<hr key={key++} className="my-6 border-white/10" />);
+    } else if (line.startsWith("- ")) {
       const text = line.replace("- ", "");
       elements.push(
-        <li key={key++} className="ml-4 flex items-start gap-2 text-sm text-slate-300 leading-relaxed">
+        <div key={key++} className="flex items-start gap-2 text-sm text-slate-300 leading-relaxed">
           <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-blue-400" />
           <span dangerouslySetInnerHTML={{ __html: formatInline(text) }} />
-        </li>
+        </div>
       );
-      continue;
-    }
-
-    // Empty line
-    if (line.trim() === "") {
+    } else if (line.trim() === "") {
       elements.push(<div key={key++} className="h-2" />);
-      continue;
-    }
-
-    // Bold heading-style lines (e.g. **"Sync failed" error** — ...)
-    if (line.startsWith("**")) {
+    } else {
       elements.push(
-        <p key={key++} className="mt-4 text-sm text-slate-300 leading-relaxed"
+        <p key={key++} className="text-sm text-slate-300 leading-relaxed"
           dangerouslySetInnerHTML={{ __html: formatInline(line) }}
         />
       );
-      continue;
     }
-
-    // Regular paragraph
-    elements.push(
-      <p key={key++} className="text-sm text-slate-300 leading-relaxed"
-        dangerouslySetInnerHTML={{ __html: formatInline(line) }}
-      />
-    );
   }
 
   return elements;
 }
 
-function formatInline(text: string): string {
-  return text
-    // Bold **text**
-    .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
-    // Code `text`
-    .replace(/`(.+?)`/g, '<code class="rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-xs font-mono text-blue-300">$1</code>');
-}
+export default async function GuideDetailPage({ params }: Props) {
+  const { slug } = await params;
 
-export default async function GuideDetailPage({
-  params,
-}: {
-  params: { slug: string };
-}) {
   const supabase = await createClient();
 
   const {
@@ -102,7 +69,7 @@ export default async function GuideDetailPage({
   const { data: guide } = await supabase
     .from("guides")
     .select("*")
-    .eq("slug", params.slug)
+    .eq("slug", slug)
     .single();
 
   if (!guide) notFound();
@@ -117,7 +84,6 @@ export default async function GuideDetailPage({
 
   return (
     <div className="space-y-6">
-      {/* Back link */}
       <Link
         href="/guides"
         className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/10"
@@ -126,7 +92,6 @@ export default async function GuideDetailPage({
         Back to Guides
       </Link>
 
-      {/* Guide header */}
       <section className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.72),rgba(5,10,26,0.88))] px-6 py-6 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_20px_50px_rgba(0,0,0,0.22)]">
         <div className="flex items-start gap-4">
           <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-violet-500/20 bg-violet-500/10 text-violet-300">
@@ -146,7 +111,6 @@ export default async function GuideDetailPage({
         </div>
       </section>
 
-      {/* Guide content */}
       <section className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] px-7 py-7">
         {guide.content ? (
           <div className="space-y-1">
@@ -157,7 +121,6 @@ export default async function GuideDetailPage({
         )}
       </section>
 
-      {/* Footer nav */}
       <Link
         href="/guides"
         className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/10"
