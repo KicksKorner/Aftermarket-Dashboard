@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   Package, CheckSquare, Coins, PoundSterling, TrendingUp, Lock,
-  LayoutDashboard, ShoppingCart, Tag, Receipt, Boxes,
+  LayoutDashboard, ShoppingCart, Tag, Receipt, Boxes, FileSpreadsheet,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import AddItemModal from "@/components/inventory/AddItemModal";
@@ -90,6 +90,18 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
     await supabase.from("profiles").update({ quick_notes: notes }).eq("id", user.id);
     setNotesSaved(true);
     setTimeout(() => setNotesSaved(false), 2000);
+  }
+
+  function handleMtdExport() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    window.location.href = `/api/sales/export?year=${year}&month=${month}`;
+  }
+
+  function handleMtdExportYear() {
+    const year = new Date().getFullYear();
+    window.location.href = `/api/sales/export?year=${year}`;
   }
 
   const salesWithBuyPrice = useMemo<SaleWithBuyPrice[]>(() => {
@@ -304,9 +316,28 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
                       <button onClick={handleDownloadTemplate} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10">Download Template</button>
                       <button onClick={() => setShowBulkImportModal(true)} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10">Bulk Import</button>
                       <button onClick={() => setShowExportModal(true)} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10">Export CSV</button>
+                      <button
+                        onClick={handleMtdExport}
+                        className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20"
+                      >
+                        <FileSpreadsheet size={14} />
+                        MTD Sales — This Month
+                      </button>
+                      <button
+                        onClick={handleMtdExportYear}
+                        className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20"
+                      >
+                        <FileSpreadsheet size={14} />
+                        MTD Sales — This Year
+                      </button>
                     </>
                   ) : (
-                    <><LockedBtn label="Download Template" /><LockedBtn label="Bulk Import" /><LockedBtn label="Export CSV" /></>
+                    <>
+                      <LockedBtn label="Download Template" />
+                      <LockedBtn label="Bulk Import" />
+                      <LockedBtn label="Export CSV" />
+                      <LockedBtn label="MTD Sales Export" />
+                    </>
                   )}
                   <button onClick={() => setShowAddModal(true)} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-black hover:opacity-90">Add Item</button>
                 </div>
@@ -315,7 +346,19 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
               {!isPremium && (
                 <div className="mb-4 flex items-center gap-2.5 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
                   <Lock size={14} className="flex-shrink-0" />
-                  <span><span className="font-semibold">Download Template</span>, <span className="font-semibold">Bulk Import</span>, <span className="font-semibold">Export CSV</span>, and the <span className="font-semibold">Return Window</span> tracker are Premium features. <a href="/upgrade" className="underline hover:text-amber-200">Upgrade to unlock →</a></span>
+                  <span>
+                    <span className="font-semibold">Download Template</span>, <span className="font-semibold">Bulk Import</span>, <span className="font-semibold">Export CSV</span>, <span className="font-semibold">MTD Sales Export</span>, and the <span className="font-semibold">Return Window</span> tracker are Premium features.{" "}
+                    <a href="/upgrade" className="underline hover:text-amber-200">Upgrade to unlock →</a>
+                  </span>
+                </div>
+              )}
+
+              {isPremium && (
+                <div className="mb-4 flex items-start gap-2.5 rounded-2xl border border-emerald-500/15 bg-emerald-500/8 px-4 py-3 text-sm text-emerald-300">
+                  <FileSpreadsheet size={14} className="mt-0.5 flex-shrink-0" />
+                  <span>
+                    <span className="font-semibold">MTD Sales exports</span> are Making Tax Digital (HMRC) compliant — includes transaction date, item name, buy price, sell price, fees, net amount, VAT (20%), and profit. Retain for 6 years per HMRC requirements.
+                  </span>
                 </div>
               )}
 
@@ -329,8 +372,16 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
                         <th className="px-4 py-4 font-medium">Qty</th>
                         <th className="px-4 py-4 font-medium">Sold Qty</th>
                         <th className="px-4 py-4 font-medium">Left</th>
-                        <th className="px-4 py-4 font-medium"><span className={`flex items-center gap-1.5 ${!isPremium ? "opacity-40" : ""}`}>{!isPremium && <Lock size={11} />}Return Window</span></th>
-                        <th className="px-4 py-4 font-medium"><span className={`flex items-center gap-1.5 ${!isPremium ? "opacity-40" : ""}`}>{!isPremium && <Lock size={11} />}Return Countdown</span></th>
+                        <th className="px-4 py-4 font-medium">
+                          <span className={`flex items-center gap-1.5 ${!isPremium ? "opacity-40" : ""}`}>
+                            {!isPremium && <Lock size={11} />}Return Window
+                          </span>
+                        </th>
+                        <th className="px-4 py-4 font-medium">
+                          <span className={`flex items-center gap-1.5 ${!isPremium ? "opacity-40" : ""}`}>
+                            {!isPremium && <Lock size={11} />}Return Countdown
+                          </span>
+                        </th>
                         <th className="px-4 py-4 font-medium">Last Sold</th>
                         <th className="px-4 py-4 font-medium">Fees</th>
                         <th className="px-4 py-4 font-medium">Shipping</th>
@@ -362,7 +413,9 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
                             <td className="px-4 py-4 text-slate-300">{Number(item.quantity_sold ?? 0)}</td>
                             <td className="px-4 py-4 text-slate-300">{Number(item.quantity_remaining ?? 0)}</td>
                             <td className="px-4 py-4">
-                              {isPremium ? <span className="text-slate-300">{item.return_window_days ? `${item.return_window_days} Days` : "-"}</span> : (
+                              {isPremium ? (
+                                <span className="text-slate-300">{item.return_window_days ? `${item.return_window_days} Days` : "-"}</span>
+                              ) : (
                                 <span className="relative inline-block select-none">
                                   <span className="pointer-events-none blur-[5px] text-slate-300">14 Days</span>
                                   <span className="absolute inset-0 flex items-center justify-center"><Lock size={11} className="text-slate-500" /></span>
@@ -370,7 +423,9 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
                               )}
                             </td>
                             <td className="px-4 py-4">
-                              {isPremium ? (countdown ? <span className={countdown.expired ? "text-red-300" : "text-amber-300"}>{countdown.label}</span> : <span className="text-slate-500">-</span>) : (
+                              {isPremium ? (
+                                countdown ? <span className={countdown.expired ? "text-red-300" : "text-amber-300"}>{countdown.label}</span> : <span className="text-slate-500">-</span>
+                              ) : (
                                 <span className="relative inline-block select-none">
                                   <span className={`pointer-events-none blur-[5px] ${countdown?.expired ? "text-red-300" : "text-amber-300"}`}>{countdown?.label ?? "0d 0h left"}</span>
                                   <span className="absolute inset-0 flex items-center justify-center"><Lock size={11} className="text-slate-500" /></span>
@@ -380,8 +435,12 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
                             <td className="px-4 py-4 text-slate-300">{item.sold_price !== null ? `£${Number(item.sold_price).toFixed(2)}` : "-"}</td>
                             <td className="px-4 py-4 text-slate-300">£{Number(item.fees).toFixed(2)}</td>
                             <td className="px-4 py-4 text-slate-300">£{Number(item.shipping).toFixed(2)}</td>
-                            <td className="px-4 py-4">{profit !== null ? <span className={profit >= 0 ? "text-emerald-300" : "text-red-300"}>£{profit.toFixed(2)}</span> : <span className="text-slate-500">-</span>}</td>
-                            <td className="px-4 py-4">{roi !== null ? <span className={roi >= 0 ? "text-emerald-300" : "text-red-300"}>{roi.toFixed(1)}%</span> : <span className="text-slate-500">-</span>}</td>
+                            <td className="px-4 py-4">
+                              {profit !== null ? <span className={profit >= 0 ? "text-emerald-300" : "text-red-300"}>£{profit.toFixed(2)}</span> : <span className="text-slate-500">-</span>}
+                            </td>
+                            <td className="px-4 py-4">
+                              {roi !== null ? <span className={roi >= 0 ? "text-emerald-300" : "text-red-300"}>{roi.toFixed(1)}%</span> : <span className="text-slate-500">-</span>}
+                            </td>
                             <td className="px-4 py-4">
                               <span className={`rounded-full px-3 py-1 text-xs font-medium ${isSoldOut ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-300" : "border border-slate-500/20 bg-slate-500/10 text-slate-300"}`}>
                                 {isSoldOut ? "Sold" : "In Stock"}

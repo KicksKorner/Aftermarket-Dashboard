@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Ticket, Plus, Trash2, Bell, TrendingUp, PoundSterling, CalendarDays, CheckCircle } from "lucide-react";
+import { Ticket, Plus, Trash2, Bell, TrendingUp, PoundSterling, CalendarDays, Settings, Check } from "lucide-react";
 
 const supabase = createClient();
 
@@ -34,6 +34,12 @@ export default function TicketsPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [showWebhookSettings, setShowWebhookSettings] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState("");
+  const [webhookSaved, setWebhookSaved] = useState(false);
+  const [webhookLoading, setWebhookLoading] = useState(true);
+  const [testSending, setTestSending] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
 
   const [eventName, setEventName] = useState("");
   const [venue, setVenue] = useState("");
@@ -46,19 +52,84 @@ export default function TicketsPage() {
   const [discordReminder, setDiscordReminder] = useState(false);
   const [notes, setNotes] = useState("");
 
-  useEffect(() => { fetchTickets(); }, []);
+  const fetchWebhook = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setWebhookLoading(false); return; }
+    const { data } = await supabase.from("profiles").select("ticket_webhook_url").eq("id", user.id).single();
+    setWebhookUrl(data?.ticket_webhook_url ?? "");
+    setWebhookLoading(false);
+  }, []);
+
+  useEffect(() => { fetchTickets(); fetchWebhook(); }, [fetchWebhook]);
 
   async function fetchTickets() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
-    const { data } = await supabase
-      .from("tickets")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("event_date", { ascending: true });
+    const { data } = await supabase.from("tickets").select("*").eq("user_id", user.id).order("event_date", { ascending: true });
     setTickets((data || []) as TicketItem[]);
     setLoading(false);
+  }
+
+  async function handleSaveWebhook() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from("profiles").update({ ticket_webhook_url: webhookUrl.trim() || null }).eq("id", user.id);
+    setWebhookSaved(true);
+    setTimeout(() => setWebhookSaved(false), 2000);
+  }
+
+  async function handleTestWebhook() {
+    if (!webhookUrl.trim()) return;
+    setTestSending(true);
+    setTestResult(null);
+    try {
+      const res = await fetch(webhookUrl.trim(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: "Aftermarket Arbitrage",
+          embeds: [{
+            title: "🎟️ Ticket Reminder Test",
+            description: "This is a test reminder from your Aftermarket Arbitrage dashboard. If you can see this, your webhook is working correctly!",
+            color: 0x3b82f6,
+            footer: { text: "Aftermarket Arbitrage · Ticket Reminders" },
+          }],
+        }),
+      });
+      setTestResult(res.ok ? "success" : "error");
+    } catch {
+      setTestResult("error");
+    } finally {
+      setTestSending(false);
+    }
+  }
+
+  async function sendReminder(ticket: TicketItem) {
+    if (!webhookUrl.trim() || !ticket.discord_reminder) return;
+    const daysUntil = ticket.transfer_deadline
+      ? Math.ceil((new Date(ticket.transfer_deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+      : null;
+
+    await fetch(webhookUrl.trim(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "Aftermarket Arbitrage",
+        embeds: [{
+          title: `⏰ Transfer Deadline Reminder — ${ticket.event_name}`,
+          color: daysUntil !== null && daysUntil <= 1 ? 0xef4444 : 0xf59e0b,
+          fields: [
+            { name: "Event", value: ticket.event_name, inline: true },
+            { name: "Transfer Deadline", value: ticket.transfer_deadline ?? "—", inline: true },
+            { name: "Days Remaining", value: daysUntil !== null ? `${daysUntil} day(s)` : "—", inline: true },
+            ...(ticket.venue ? [{ name: "Venue", value: ticket.venue, inline: true }] : []),
+            ...(ticket.seat_info ? [{ name: "Seat Info", value: ticket.seat_info, inline: true }] : []),
+          ],
+          footer: { text: "Aftermarket Arbitrage · Ticket Reminders" },
+        }],
+      }),
+    });
   }
 
   function resetForm() {
@@ -70,16 +141,10 @@ export default function TicketsPage() {
 
   function openEdit(t: TicketItem) {
     setEditId(t.id);
-    setEventName(t.event_name);
-    setVenue(t.venue ?? "");
-    setSeatInfo(t.seat_info ?? "");
-    setEventDate(t.event_date ?? "");
-    setTransferDeadline(t.transfer_deadline ?? "");
-    setCostPrice(String(t.cost_price));
-    setSellPrice(t.sell_price ? String(t.sell_price) : "");
-    setStatus(t.status);
-    setDiscordReminder(t.discord_reminder);
-    setNotes(t.notes ?? "");
+    setEventName(t.event_name); setVenue(t.venue ?? ""); setSeatInfo(t.seat_info ?? "");
+    setEventDate(t.event_date ?? ""); setTransferDeadline(t.transfer_deadline ?? "");
+    setCostPrice(String(t.cost_price)); setSellPrice(t.sell_price ? String(t.sell_price) : "");
+    setStatus(t.status); setDiscordReminder(t.discord_reminder); setNotes(t.notes ?? "");
     setShowForm(true);
   }
 
@@ -87,40 +152,44 @@ export default function TicketsPage() {
     e.preventDefault();
     if (!eventName.trim() || !costPrice) return;
     setSaving(true);
-
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
 
     const payload = {
       user_id: user.id,
-      event_name: eventName.trim(),
-      venue: venue.trim() || null,
-      seat_info: seatInfo.trim() || null,
-      event_date: eventDate || null,
-      transfer_deadline: transferDeadline || null,
-      cost_price: Number(costPrice),
-      sell_price: sellPrice ? Number(sellPrice) : null,
-      status,
-      discord_reminder: discordReminder,
-      notes: notes.trim() || null,
+      event_name: eventName.trim(), venue: venue.trim() || null,
+      seat_info: seatInfo.trim() || null, event_date: eventDate || null,
+      transfer_deadline: transferDeadline || null, cost_price: Number(costPrice),
+      sell_price: sellPrice ? Number(sellPrice) : null, status,
+      discord_reminder: discordReminder, notes: notes.trim() || null,
     };
 
     if (editId) {
       await supabase.from("tickets").update(payload).eq("id", editId);
     } else {
-      await supabase.from("tickets").insert(payload);
+      const { data: newTicket } = await supabase.from("tickets").insert(payload).select().single();
+      if (newTicket && discordReminder && webhookUrl.trim()) {
+        await sendReminder(newTicket as TicketItem);
+      }
     }
 
-    resetForm();
-    setShowForm(false);
-    setSaving(false);
-    fetchTickets();
+    resetForm(); setShowForm(false); setSaving(false); fetchTickets();
   }
 
   async function handleDelete(id: string) {
     if (!window.confirm("Delete this ticket?")) return;
     await supabase.from("tickets").delete().eq("id", id);
     fetchTickets();
+  }
+
+  async function handleSendReminder(ticket: TicketItem) {
+    if (!webhookUrl.trim()) {
+      alert("Please add your Discord webhook URL in settings first.");
+      setShowWebhookSettings(true);
+      return;
+    }
+    await sendReminder(ticket);
+    alert("Reminder sent to Discord!");
   }
 
   const totalCost = tickets.reduce((s, t) => s + Number(t.cost_price), 0);
@@ -130,21 +199,66 @@ export default function TicketsPage() {
 
   const getDaysUntil = (dateStr: string | null) => {
     if (!dateStr) return null;
-    const diff = new Date(dateStr).getTime() - Date.now();
-    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+    return Math.ceil((new Date(dateStr).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   };
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <section>
-        <div className="mb-5 flex items-center gap-2">
-          <span className="text-blue-400">🎟️</span>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Tickets</h1>
-            <p className="mt-1 text-sm text-slate-400">Track tickets you've bought, set transfer reminders and log your profit.</p>
+        <div className="mb-5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-blue-400">🎟️</span>
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">Tickets</h1>
+              <p className="mt-1 text-sm text-slate-400">Track tickets, set transfer reminders and log profit.</p>
+            </div>
           </div>
+          <button
+            onClick={() => setShowWebhookSettings(!showWebhookSettings)}
+            className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/10"
+          >
+            <Settings size={14} />
+            Reminder Settings
+          </button>
         </div>
+
+        {/* Webhook settings panel */}
+        {showWebhookSettings && (
+          <div className="mb-5 rounded-[20px] border border-blue-500/15 bg-[#081120] p-5">
+            <h3 className="mb-1 text-sm font-semibold text-white flex items-center gap-2">
+              <Bell size={14} className="text-blue-300" />
+              Discord Reminder Webhook
+            </h3>
+            <p className="mb-4 text-xs text-slate-500">
+              Paste your personal Discord webhook URL below. When you toggle reminders on a ticket, alerts will be sent to this webhook. To create one: Discord server → Edit Channel → Integrations → Webhooks → New Webhook → Copy URL.
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <input
+                value={webhookLoading ? "" : webhookUrl}
+                onChange={(e) => setWebhookUrl(e.target.value)}
+                placeholder="https://discord.com/api/webhooks/..."
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none placeholder:text-slate-600 focus:border-blue-400/30"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveWebhook}
+                  className={`flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-medium transition ${webhookSaved ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-300" : "border border-white/10 bg-white/5 text-white hover:bg-white/10"}`}
+                >
+                  {webhookSaved ? <><Check size={13} />Saved</> : "Save"}
+                </button>
+                <button
+                  onClick={handleTestWebhook}
+                  disabled={!webhookUrl.trim() || testSending}
+                  className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-2.5 text-sm font-medium text-blue-300 transition hover:bg-blue-500/20 disabled:opacity-40"
+                >
+                  {testSending ? "Sending..." : "Test"}
+                </button>
+              </div>
+            </div>
+            {testResult === "success" && <p className="mt-2 text-xs text-emerald-400">Test sent successfully — check your Discord channel.</p>}
+            {testResult === "error" && <p className="mt-2 text-xs text-red-400">Failed to send. Check the webhook URL is correct.</p>}
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -167,26 +281,20 @@ export default function TicketsPage() {
       </section>
 
       <section className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.72),rgba(5,10,26,0.88))] p-6">
-        {/* Section header */}
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold">My Tickets</h2>
             <p className="mt-1 text-sm text-slate-400">Add and manage your ticket purchases.</p>
           </div>
-          <button
-            onClick={() => { resetForm(); setShowForm(!showForm); }}
-            className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500"
-          >
-            <Plus size={15} />
-            Add Ticket
+          <button onClick={() => { resetForm(); setShowForm(!showForm); }}
+            className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500">
+            <Plus size={15} />Add Ticket
           </button>
         </div>
 
-        {/* Add / Edit form */}
         {showForm && (
           <form onSubmit={handleSubmit} className="mb-6 rounded-[20px] border border-blue-500/15 bg-[#081120] p-5 space-y-4">
             <h3 className="text-sm font-semibold text-white">{editId ? "Edit Ticket" : "New Ticket"}</h3>
-
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <label className="mb-1.5 block text-xs font-medium text-slate-400">Event Name *</label>
@@ -194,46 +302,37 @@ export default function TicketsPage() {
                   placeholder="e.g. Taylor Swift — Wembley Stadium"
                   className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600 focus:border-blue-400/30" required />
               </div>
-
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-400">Transfer Deadline</label>
                 <input type="date" value={transferDeadline} onChange={(e) => setTransferDeadline(e.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-blue-400/30" />
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none" />
               </div>
-
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-400">Event Date</label>
                 <input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-blue-400/30" />
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none" />
               </div>
-
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-400">Venue / Event Location</label>
-                <input value={venue} onChange={(e) => setVenue(e.target.value)}
-                  placeholder="O2 Arena, London..."
+                <input value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="O2 Arena, London..."
                   className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600" />
               </div>
-
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-400">Seat Info</label>
-                <input value={seatInfo} onChange={(e) => setSeatInfo(e.target.value)}
-                  placeholder="Block A, Row 12, Seats 4–5..."
+                <input value={seatInfo} onChange={(e) => setSeatInfo(e.target.value)} placeholder="Block A, Row 12, Seats 4–5..."
                   className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600" />
               </div>
-
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-400">Cost Price (£) *</label>
                 <input type="number" step="0.01" value={costPrice} onChange={(e) => setCostPrice(e.target.value)}
                   placeholder="0.00" className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none" required />
               </div>
-
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-400">Sell Price (£)</label>
                 <input type="number" step="0.01" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)}
                   placeholder="Leave blank if not sold yet"
                   className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600" />
               </div>
-
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-400">Status</label>
                 <select value={status} onChange={(e) => setStatus(e.target.value as TicketItem["status"])}
@@ -244,30 +343,25 @@ export default function TicketsPage() {
                   <option value="expired">Expired</option>
                 </select>
               </div>
-
               <div className="sm:col-span-2">
                 <label className="mb-1.5 block text-xs font-medium text-slate-400">Notes</label>
                 <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
                   placeholder="Order ref, buyer details, platform used..."
                   className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600 resize-none" />
               </div>
-
-              {/* Discord reminder toggle */}
               <div className="sm:col-span-2 flex items-center justify-between rounded-xl border border-blue-500/15 bg-blue-500/5 px-4 py-3">
                 <div>
-                  <p className="text-sm font-medium text-white flex items-center gap-2"><Bell size={14} className="text-blue-300" />Send Discord DM Reminder</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Get pinged 7 days, 1 day, and day of transfer deadline</p>
+                  <p className="text-sm font-medium text-white flex items-center gap-2"><Bell size={14} className="text-blue-300" />Send Discord Reminder</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {webhookUrl.trim() ? "Sends to your saved webhook URL — 7 days, 1 day, and day of transfer deadline" : "Add your webhook URL in Reminder Settings first"}
+                  </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setDiscordReminder(!discordReminder)}
-                  className={`relative h-6 w-11 rounded-full transition-colors ${discordReminder ? "bg-blue-600" : "bg-white/10"}`}
-                >
+                <button type="button" onClick={() => setDiscordReminder(!discordReminder)}
+                  className={`relative h-6 w-11 rounded-full transition-colors ${discordReminder ? "bg-blue-600" : "bg-white/10"}`}>
                   <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${discordReminder ? "translate-x-5" : "translate-x-0.5"}`} />
                 </button>
               </div>
             </div>
-
             <div className="flex gap-3">
               <button type="submit" disabled={saving}
                 className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50">
@@ -281,7 +375,6 @@ export default function TicketsPage() {
           </form>
         )}
 
-        {/* Tickets list */}
         {loading ? (
           <p className="py-10 text-center text-sm text-slate-500">Loading tickets...</p>
         ) : tickets.length === 0 ? (
@@ -296,23 +389,24 @@ export default function TicketsPage() {
               const profit = t.sell_price ? Number(t.sell_price) - Number(t.cost_price) : null;
               const daysUntilDeadline = getDaysUntil(t.transfer_deadline);
               const daysUntilEvent = getDaysUntil(t.event_date);
-
               return (
                 <div key={t.id} className="rounded-[20px] border border-white/8 bg-[#081120] p-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="flex-1">
                       <div className="flex flex-wrap items-center gap-2 mb-2">
                         <h3 className="text-base font-semibold text-white">{t.event_name}</h3>
-                        <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${statusStyles[t.status] ?? statusStyles.holding}`}>
-                          {t.status}
-                        </span>
-                        {t.discord_reminder && (
+                        <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${statusStyles[t.status] ?? statusStyles.holding}`}>{t.status}</span>
+                        {t.discord_reminder && webhookUrl.trim() && (
                           <span className="flex items-center gap-1 rounded-full border border-blue-500/20 bg-blue-500/10 px-2.5 py-0.5 text-xs text-blue-300">
                             <Bell size={10} />Reminder on
                           </span>
                         )}
+                        {t.discord_reminder && !webhookUrl.trim() && (
+                          <span className="flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-xs text-amber-300">
+                            <Bell size={10} />No webhook set
+                          </span>
+                        )}
                       </div>
-
                       <div className="grid gap-x-6 gap-y-1 text-xs text-slate-400 sm:grid-cols-2 lg:grid-cols-3">
                         {t.venue && <p>📍 {t.venue}</p>}
                         {t.seat_info && <p>💺 {t.seat_info}</p>}
@@ -329,8 +423,6 @@ export default function TicketsPage() {
                         {t.notes && <p className="sm:col-span-2 lg:col-span-3 text-slate-500">📝 {t.notes}</p>}
                       </div>
                     </div>
-
-                    {/* Financials */}
                     <div className="flex items-center gap-4 lg:flex-col lg:items-end lg:gap-2">
                       <div className="flex gap-4 text-sm">
                         <div className="text-right">
@@ -352,12 +444,15 @@ export default function TicketsPage() {
                           </div>
                         )}
                       </div>
-
                       <div className="flex gap-2">
+                        {t.discord_reminder && t.status === "holding" && (
+                          <button onClick={() => handleSendReminder(t)}
+                            className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-1.5 text-xs text-blue-300 hover:bg-blue-500/20 flex items-center gap-1">
+                            <Bell size={11} />Remind
+                          </button>
+                        )}
                         <button onClick={() => openEdit(t)}
-                          className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs hover:bg-white/10">
-                          Edit
-                        </button>
+                          className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs hover:bg-white/10">Edit</button>
                         <button onClick={() => handleDelete(t.id)}
                           className="rounded-xl border border-red-500/20 bg-red-500/10 p-1.5 text-red-300 hover:bg-red-500/20">
                           <Trash2 size={13} />
