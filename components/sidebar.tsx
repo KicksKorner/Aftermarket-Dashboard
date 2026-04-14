@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   Lock,
+  ShoppingBag,
 } from "lucide-react";
 
 type SidebarProps = {
@@ -42,6 +43,13 @@ const navItems: NavItem[] = [
     href: "/dashboard/sole-scan",
     label: "Sole Scan",
     icon: Footprints,
+    startsWith: true,
+    premiumLocked: true,
+  },
+  {
+    href: "/dashboard/vinted-bot",
+    label: "Vinted Bot",
+    icon: ShoppingBag,
     startsWith: true,
     premiumLocked: true,
   },
@@ -92,8 +100,7 @@ function SidebarContent({
   const activeItem =
     "border border-white/10 bg-white/10 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)]";
   const inactiveItem = "text-slate-300 hover:bg-white/5 hover:text-white";
-  const lockedItem =
-    "text-slate-500 cursor-pointer hover:bg-white/5";
+  const lockedItem = "text-slate-500 cursor-pointer hover:bg-white/5";
 
   const isUnlocked = role === "premium" || role === "admin";
 
@@ -134,12 +141,15 @@ function SidebarContent({
             ? pathname.startsWith(item.href)
             : pathname === item.href;
 
-          // Sole Scan — locked for member, routes to /upgrade
           if (item.premiumLocked && !isUnlocked) {
             return (
               <Link
                 key={item.href}
-                href="/upgrade"
+                href={
+                  item.href === "/dashboard/vinted-bot"
+                    ? "/vinted-bot"
+                    : "/upgrade"
+                }
                 onClick={onNavigate}
                 className={`${baseItem} ${lockedItem}`}
               >
@@ -199,7 +209,6 @@ export default function Sidebar({ role, email }: SidebarProps) {
               </p>
             </div>
           </div>
-
           <button
             type="button"
             onClick={() => setOpen(true)}
