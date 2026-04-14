@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   LayoutDashboard, BookOpen, Shield, LogOut, Boxes,
-  Receipt, Mail, Footprints, Menu, X, Lock, ShoppingBag, Calculator, Ticket,
+  Receipt, Mail, Footprints, Menu, X, Lock, ShoppingBag, Calculator, Ticket, PoundSterling,
 } from "lucide-react";
 
 type SidebarProps = { role: string; email: string; };
