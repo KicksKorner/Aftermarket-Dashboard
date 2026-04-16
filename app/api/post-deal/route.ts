@@ -38,12 +38,13 @@ export async function POST(req: NextRequest) {
     const sendX = formData.get("postToX") !== "false";
     const sendFacebook = formData.get("postToFacebook") === "true";
     const sendWebsite = formData.get("postToWebsite") === "true";
+    const priority = (formData.get("priority") as string) || "instant_cop";
 
     if (!description || !price || !link) {
       return NextResponse.json({ ok: false, error: "description, price and link are required" }, { status: 400 });
     }
 
-    const deal: DealPayload = { destination, destinationLabel, description, price, dealLink: link, imageUrl };
+    const deal: DealPayload = { destination, destinationLabel, description, price, dealLink: link, imageUrl, priority };
     const results: Record<string, unknown> = { discord: null, x: null, facebook: null, website: null };
     const errors: Record<string, unknown> = {};
 

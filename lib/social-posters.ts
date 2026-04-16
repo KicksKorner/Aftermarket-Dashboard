@@ -11,6 +11,13 @@ export type DealPayload = {
   postToDiscord?: boolean;
   postToX?: boolean;
   postToFacebook?: boolean;
+  priority?: string;
+};
+
+const PRIORITY_CONFIG: Record<string, { label: string; color: number }> = {
+  instant_cop:      { label: "⚡ INSTANT COP",      color: 0xef4444 },
+  profitable:       { label: "💰 PROFITABLE",        color: 0x22c55e },
+  personal_bargain: { label: "🛒 PERSONAL BARGAIN",  color: 0x3b82f6 },
 };
 
 function formatPrice(price: string | number) {
@@ -27,14 +34,20 @@ function getDiscordWebhook(destination?: string) {
 }
 
 function makeDiscordPayload(deal: DealPayload) {
+  const priority = PRIORITY_CONFIG[deal.priority || "instant_cop"] ?? PRIORITY_CONFIG.instant_cop;
   return {
     embeds: [
       {
         title: `${deal.destinationLabel || "Deal"} STEAL! Alert 🚨`,
         description: deal.description,
         url: deal.dealLink,
-        color: 3447003,
+        color: priority.color,
         fields: [
+          {
+            name: "Priority",
+            value: priority.label,
+            inline: false,
+          },
           {
             name: "Price",
             value: formatPrice(deal.price),
