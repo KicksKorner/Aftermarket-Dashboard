@@ -458,6 +458,7 @@ export default function PokemonCheckoutsPage() {
 
       {/* Payment Due Banner */}
       {activeOrders.length > 0 && (
+        <div className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-[20px] border border-blue-500/20 bg-[linear-gradient(135deg,rgba(59,130,246,0.08),rgba(99,102,241,0.06))] p-5">
             <div className="flex items-center gap-2 mb-2">
@@ -539,6 +540,7 @@ export default function PokemonCheckoutsPage() {
               <p className={`font-bold ${fundsNeededTotal > 0 ? "text-amber-400" : "text-slate-600"}`}>£{fundsNeededTotal.toFixed(2)}</p>
             </div>
           </div>
+        </div>
         </div>
       )}
 
