@@ -12,6 +12,49 @@ import {
 
 type Destination = "amazon" | "sneakers";
 type PreviewTab = "website" | "discord" | "x";
+type Priority = "instant_cop" | "profitable" | "personal_bargain";
+
+const PRIORITY_CONFIG: Record<Priority, {
+  label: string;
+  emoji: string;
+  discordColor: number;
+  previewBorder: string;
+  previewBg: string;
+  previewText: string;
+  badgeBg: string;
+  badgeText: string;
+}> = {
+  instant_cop: {
+    label: "Instant Cop",
+    emoji: "⚡",
+    discordColor: 0xef4444,          // red-500
+    previewBorder: "border-red-500",
+    previewBg: "bg-red-500/10",
+    previewText: "text-red-400",
+    badgeBg: "bg-red-500",
+    badgeText: "text-white",
+  },
+  profitable: {
+    label: "Profitable",
+    emoji: "💰",
+    discordColor: 0x22c55e,          // green-500
+    previewBorder: "border-green-500",
+    previewBg: "bg-green-500/10",
+    previewText: "text-green-400",
+    badgeBg: "bg-green-600",
+    badgeText: "text-white",
+  },
+  personal_bargain: {
+    label: "Personal Bargain",
+    emoji: "🛒",
+    discordColor: 0x3b82f6,          // blue-500
+    previewBorder: "border-blue-500",
+    previewBg: "bg-blue-500/10",
+    previewText: "text-blue-400",
+    badgeBg: "bg-blue-600",
+    badgeText: "text-white",
+  },
+};
 
 type ApiResponse = {
   ok?: boolean;
@@ -41,6 +84,7 @@ function calcSavePct(price: string, was: string): string {
 
 export default function DealPostPage() {
   const [destination, setDestination] = useState<Destination>("amazon");
+  const [priority, setPriority] = useState<Priority>("instant_cop");
   const [productTitle, setProductTitle] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
@@ -71,11 +115,12 @@ export default function DealPostPage() {
   const savePct = calcSavePct(price, was);
 
   const discordConfig = useMemo(() => {
+    const p = PRIORITY_CONFIG[priority];
     if (destination === "sneakers") {
-      return { title: "Percy Bargains Alert 🚨", color: "border-emerald-500", footer: "Bargain Sniper UK • Sneakers" };
+      return { title: "Percy Bargains Alert 🚨", color: p.previewBorder, footer: "Bargain Sniper UK • Sneakers", priority: p };
     }
-    return { title: "Amazon STEAL! Alert 🚨", color: "border-blue-500", footer: "Bargain Sniper UK • Amazon Deals" };
-  }, [destination]);
+    return { title: "Amazon STEAL! Alert 🚨", color: p.previewBorder, footer: "Bargain Sniper UK • Amazon Deals", priority: p };
+  }, [destination, priority]);
 
   function renderStatus(label: string, success: boolean, failure: boolean) {
     const state = success ? "Success" : failure ? "Failed" : "Not sent";
@@ -101,6 +146,7 @@ export default function DealPostPage() {
     try {
       const formData = new FormData();
       formData.append("destination", destination);
+      formData.append("priority", priority);
       formData.append("description", productTitle || description);
       formData.append("price", price);
       formData.append("was", was);
@@ -132,7 +178,7 @@ export default function DealPostPage() {
       setMessage("Deal posted successfully. ✅");
       setProductTitle(""); setDescription(""); setPrice(""); setWas("");
       setLink(""); setImageUrl(""); setImageFile(null);
-      setCategory(""); setBadge(""); setExpiry(""); setDotd(false);
+      setCategory(""); setBadge(""); setExpiry(""); setDotd(false); setPriority("instant_cop");
     } catch {
       setMessage("Something went wrong.");
     } finally {
@@ -172,6 +218,30 @@ export default function DealPostPage() {
                 <option value="amazon">Amazon</option>
                 <option value="sneakers">Sneakers</option>
               </select>
+            </div>
+
+            {/* Priority */}
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Deal Priority <span className="text-slate-500">(shown on Discord alert)</span>
+              </label>
+              <div className="grid grid-cols-3 gap-3">
+                {(Object.entries(PRIORITY_CONFIG) as [Priority, typeof PRIORITY_CONFIG[Priority]][]).map(([key, cfg]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setPriority(key)}
+                    className={`flex flex-col items-center gap-1.5 rounded-2xl border px-3 py-3 text-sm font-medium transition-all
+                      ${priority === key
+                        ? `${cfg.badgeBg} border-transparent text-white shadow-lg`
+                        : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-slate-200"
+                      }`}
+                  >
+                    <span className="text-xl">{cfg.emoji}</span>
+                    <span className="text-xs leading-tight text-center">{cfg.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div>
@@ -378,6 +448,10 @@ export default function DealPostPage() {
           {previewTab === "discord" && (
             <div className={`rounded-2xl border-l-4 ${discordConfig.color} bg-[#2b2d31] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] space-y-3`}>
               <p className="text-sm font-bold text-white">{discordConfig.title}</p>
+              {/* Priority badge */}
+              <div className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${discordConfig.priority.badgeBg} ${discordConfig.priority.badgeText}`}>
+                {discordConfig.priority.emoji} {discordConfig.priority.label.toUpperCase()}
+              </div>
               <p className="text-[15px] leading-7 text-slate-200 whitespace-pre-line">{productTitle ? `**${productTitle}**\n${description}` : displayDesc}</p>
               <div className="space-y-1">
                 <div className="flex gap-2 items-center">
