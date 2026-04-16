@@ -38,6 +38,8 @@ type Order = {
   notes: string | null;
   no_email_flag: boolean;
   status: string;
+  image_url: string | null;
+  funds_ready: boolean;
   profile?: Profile;
 };
 
@@ -52,7 +54,7 @@ type ProfileForm = {
 type OrderForm = {
   item_name: string; quantity: string; price_per_unit: string;
   release_date: string; payment_date: string;
-  profile_id: string; notes: string; no_email_flag: boolean;
+  profile_id: string; notes: string; no_email_flag: boolean; image_url: string; funds_ready: boolean;
 };
 
 const emptyProfileForm: ProfileForm = {
@@ -66,7 +68,7 @@ const emptyProfileForm: ProfileForm = {
 const emptyOrderForm: OrderForm = {
   item_name: "", quantity: "1", price_per_unit: "",
   release_date: "", payment_date: "",
-  profile_id: "", notes: "", no_email_flag: false,
+  profile_id: "", notes: "", no_email_flag: false, image_url: "", funds_ready: false,
 };
 
 function daysUntil(dateStr: string | null): number | null {
@@ -194,6 +196,16 @@ function OrderFormPanel({
             placeholder="e.g. No confirmation email received, Order #E000..." rows={2} className={inputCls} />
         </div>
         <div className="md:col-span-2">
+          <label className={labelCls}>Product Image URL <span className="text-slate-600">(optional — paste Pokémon Centre image link)</span></label>
+          <input value={form.image_url} onChange={e => setForm({...form, image_url: e.target.value})}
+            placeholder="https://www.pokemoncenter.com/..." className={inputCls} />
+          {form.image_url && (
+            <div className="mt-2">
+              <img src={form.image_url} alt="Preview" className="h-20 w-20 rounded-xl object-contain border border-white/10 bg-black/20 p-1" />
+            </div>
+          )}
+        </div>
+        <div className="md:col-span-2">
           <label className="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" checked={form.no_email_flag}
               onChange={e => setForm({...form, no_email_flag: e.target.checked})}
@@ -294,6 +306,8 @@ export default function PokemonCheckoutsPage() {
       profile_id: orderForm.profile_id || null,
       notes: orderForm.notes || null,
       no_email_flag: orderForm.no_email_flag,
+      image_url: orderForm.image_url || null,
+      funds_ready: orderForm.funds_ready,
       status: "active",
     });
     setSavingOrder(false);
@@ -312,6 +326,8 @@ export default function PokemonCheckoutsPage() {
       profile_id: order.profile_id || "",
       notes: order.notes || "",
       no_email_flag: order.no_email_flag,
+      image_url: order.image_url || "",
+      funds_ready: order.funds_ready || false,
     });
     setEditMsg("");
     setShowOrderForm(false);
@@ -329,6 +345,8 @@ export default function PokemonCheckoutsPage() {
       profile_id: editForm.profile_id || null,
       notes: editForm.notes || null,
       no_email_flag: editForm.no_email_flag,
+      image_url: editForm.image_url || null,
+      funds_ready: editForm.funds_ready,
     }).eq("id", editingOrderId!);
     setSavingEdit(false);
     if (error) { setEditMsg(error.message); return; }
@@ -387,6 +405,10 @@ export default function PokemonCheckoutsPage() {
 
   const activeOrders = orders.filter(o => o.status !== "delivered");
   const deliveredOrders = orders.filter(o => o.status === "delivered");
+
+  const fundsReadyTotal = activeOrders.filter(o => o.funds_ready).reduce((s, o) => s + o.price_per_unit * o.quantity, 0);
+  const fundsNeededTotal = activeOrders.filter(o => !o.funds_ready).reduce((s, o) => s + o.price_per_unit * o.quantity, 0);
+  const allFundsReady = activeOrders.length > 0 && activeOrders.every(o => o.funds_ready);
 
   const paymentGroups: Record<string, { total: number; orders: Order[] }> = {};
   for (const o of activeOrders) {
@@ -490,6 +512,34 @@ export default function PokemonCheckoutsPage() {
             </div>
           </div>
         </div>
+
+        {/* Funds Ready Banner */}
+        <div className={`rounded-[20px] border p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3
+          ${allFundsReady
+            ? "border-emerald-500/30 bg-[linear-gradient(135deg,rgba(16,185,129,0.08),rgba(16,185,129,0.04))]"
+            : "border-amber-500/25 bg-[linear-gradient(135deg,rgba(245,158,11,0.07),rgba(245,158,11,0.03))]"}`}>
+          <div className="flex items-center gap-3">
+            <div className={`h-3 w-3 rounded-full flex-shrink-0 ${allFundsReady ? "bg-emerald-400" : "bg-amber-400"} shadow-lg`} />
+            <div>
+              <p className={`text-sm font-semibold ${allFundsReady ? "text-emerald-300" : "text-amber-300"}`}>
+                {allFundsReady ? "✅ All funds ready — you're good to go!" : "⚠️ Some orders still need funds"}
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {activeOrders.filter(o => o.funds_ready).length} of {activeOrders.length} orders marked ready
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-4 text-sm">
+            <div className="text-right">
+              <p className="text-xs text-slate-500">Ready</p>
+              <p className="font-bold text-emerald-400">£{fundsReadyTotal.toFixed(2)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-slate-500">Still needed</p>
+              <p className={`font-bold ${fundsNeededTotal > 0 ? "text-amber-400" : "text-slate-600"}`}>£{fundsNeededTotal.toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Tabs */}
@@ -548,6 +598,13 @@ export default function PokemonCheckoutsPage() {
                     className={`rounded-[20px] border bg-[linear-gradient(160deg,rgba(9,18,46,0.95),rgba(3,8,20,0.98))] p-5 transition
                       ${paymentUrgent ? "border-red-500/30 shadow-[0_0_24px_rgba(239,68,68,0.07)]" : "border-white/[0.07]"}`}>
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      {/* Image thumbnail */}
+                      {order.image_url && (
+                        <div className="flex-shrink-0">
+                          <img src={order.image_url} alt={order.item_name}
+                            className="h-20 w-20 rounded-xl object-contain border border-white/10 bg-black/30 p-1" />
+                        </div>
+                      )}
                       <div className="flex-1 space-y-2.5">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="font-semibold text-white text-base">{order.item_name}</h3>
@@ -587,6 +644,18 @@ export default function PokemonCheckoutsPage() {
                       </div>
 
                       <div className="flex items-center gap-2 lg:flex-col lg:items-end lg:ml-4">
+                        {/* Funds ready toggle */}
+                        <button onClick={async () => {
+                            await supabase.from("preorder_orders").update({ funds_ready: !order.funds_ready }).eq("id", order.id);
+                            loadAll();
+                          }}
+                          className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition
+                            ${order.funds_ready
+                              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                              : "border-white/10 bg-white/5 text-slate-500 hover:text-slate-300"}`}>
+                          <span className={`h-2 w-2 rounded-full ${order.funds_ready ? "bg-emerald-400" : "bg-slate-600"}`} />
+                          {order.funds_ready ? "Funds Ready" : "Funds Needed"}
+                        </button>
                         <button onClick={() => startEdit(order)}
                           className="flex items-center gap-1.5 rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-400 hover:bg-blue-500/20 transition">
                           <Pencil size={12} /> Edit
