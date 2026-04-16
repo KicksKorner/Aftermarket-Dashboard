@@ -22,6 +22,7 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
+  { href: "/admin", label: "Admin", icon: Shield, adminOnly: true },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/sole-scan", label: "Sole Scan", icon: Footprints, startsWith: true, premiumLocked: true, lockedHref: "/upgrade" },
   { href: "/dashboard/vinted-bot", label: "Vinted Bot", icon: ShoppingBag, startsWith: true, premiumLocked: true, lockedHref: "/vinted-bot" },
@@ -32,7 +33,6 @@ const navItems: NavItem[] = [
   { href: "/dashboard/vat-tracker", label: "VAT Tracker", icon: PoundSterling, startsWith: true },
   { href: "/dashboard/tickets", label: "Tickets", icon: Ticket, startsWith: true },
   { href: "/guides", label: "Guides", icon: BookOpen },
-  { href: "/admin", label: "Admin", icon: Shield, adminOnly: true },
 ];
 
 const roleBadgeClass: Record<string, string> = {
