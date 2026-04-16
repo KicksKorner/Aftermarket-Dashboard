@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from "@/lib/supabase/client";
 import {
   PackageSearch, User, Plus, Trash2, CheckCircle2, AlertTriangle,
   Clock, CalendarDays, CreditCard, MapPin, Mail, Phone,
@@ -128,7 +128,7 @@ function ProfileCard({ form }: { form: ProfileForm }) {
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function PokemonCheckoutsPage() {
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
   const [tab, setTab] = useState<Tab>("orders");
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
