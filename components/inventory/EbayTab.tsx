@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { ShoppingCart, RefreshCw, Unlink, CheckCircle, AlertCircle, Package, Link2 } from "lucide-react";
+import { ShoppingCart, RefreshCw, Unlink, CheckCircle, AlertCircle, Package, Link2, Plus } from "lucide-react";
 
 const supabase = createClient();
 
@@ -26,6 +26,15 @@ type InventoryItem = {
 
 type ConnectionStatus = "loading" | "connected" | "disconnected";
 
+type EbayListing = {
+  ebayItemId: string;
+  title: string;
+  price: number;
+  quantity: number;
+  imageUrl: string | null;
+  alreadyInInventory: boolean;
+};
+
 export default function EbayTab() {
   const [status, setStatus] = useState<ConnectionStatus>("loading");
   const [sales, setSales] = useState<EbaySale[]>([]);
@@ -35,6 +44,11 @@ export default function EbayTab() {
   const [disconnecting, setDisconnecting] = useState(false);
   const [matching, setMatching] = useState<string | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<Record<string, string>>({});
+  const [showListingsPanel, setShowListingsPanel] = useState(false);
+  const [listings, setListings] = useState<EbayListing[]>([]);
+  const [loadingListings, setLoadingListings] = useState(false);
+  const [addingItem, setAddingItem] = useState<string | null>(null);
+  const [listingsMsg, setListingsMsg] = useState<string | null>(null);
 
   const fetchSales = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -59,6 +73,56 @@ export default function EbayTab() {
       .order("item_name", { ascending: true });
     setInventoryItems((data || []) as InventoryItem[]);
   }, []);
+
+  async function fetchListings() {
+    setLoadingListings(true);
+    setListingsMsg(null);
+    try {
+      const res = await fetch("/api/ebay/sync-listings");
+      const data = await res.json();
+      if (res.ok) {
+        setListings(data.listings || []);
+        setShowListingsPanel(true);
+      } else {
+        setListingsMsg(data.error || "Failed to fetch listings.");
+      }
+    } catch {
+      setListingsMsg("Failed to fetch listings. Please try again.");
+    } finally {
+      setLoadingListings(false);
+    }
+  }
+
+  async function addListingToInventory(listing: EbayListing) {
+    setAddingItem(listing.ebayItemId);
+    try {
+      const res = await fetch("/api/ebay/sync-listings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ebayItemId: listing.ebayItemId,
+          title: listing.title,
+          price: listing.price,
+          quantity: listing.quantity,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        // Mark as added in the list
+        setListings(prev => prev.map(l =>
+          l.ebayItemId === listing.ebayItemId ? { ...l, alreadyInInventory: true } : l
+        ));
+        setListingsMsg(`✅ "${listing.title}" added to inventory. Remember to set the buy price via Edit.`);
+        fetchInventory();
+      } else {
+        setListingsMsg(data.error || "Failed to add item.");
+      }
+    } catch {
+      setListingsMsg("Something went wrong.");
+    } finally {
+      setAddingItem(null);
+    }
+  }
 
   const checkConnection = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -194,7 +258,77 @@ export default function EbayTab() {
           <ShoppingCart size={16} />
           Connect eBay Account
         </a>
-        {syncResult && (
+        {/* Listings import panel */}
+      {showListingsPanel && (
+        <div className="rounded-[20px] border border-emerald-500/15 bg-[#071021] overflow-hidden">
+          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+            <div>
+              <p className="text-sm font-semibold text-white">Your Active eBay Listings</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {listings.filter(l => !l.alreadyInInventory).length} new •{" "}
+                {listings.filter(l => l.alreadyInInventory).length} already in inventory
+              </p>
+            </div>
+            <button onClick={() => { setShowListingsPanel(false); setListingsMsg(null); }}
+              className="text-slate-500 hover:text-white transition text-lg leading-none">✕</button>
+          </div>
+
+          {listingsMsg && (
+            <div className="mx-5 mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2.5 text-sm text-emerald-300">
+              {listingsMsg}
+            </div>
+          )}
+
+          <div className="divide-y divide-white/5">
+            {listings.length === 0 ? (
+              <p className="px-5 py-8 text-center text-sm text-slate-500">No active listings found on your eBay account.</p>
+            ) : (
+              listings.map(listing => (
+                <div key={listing.ebayItemId} className={`flex items-center gap-4 px-5 py-4 transition hover:bg-white/[0.02] ${listing.alreadyInInventory ? "opacity-50" : ""}`}>
+                  {/* Thumbnail */}
+                  {listing.imageUrl ? (
+                    <img src={listing.imageUrl} alt={listing.title}
+                      className="h-14 w-14 flex-shrink-0 rounded-xl object-contain border border-white/10 bg-black/20 p-1" />
+                  ) : (
+                    <div className="h-14 w-14 flex-shrink-0 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center">
+                      <Package size={20} className="text-slate-600" />
+                    </div>
+                  )}
+                  {/* Details */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{listing.title}</p>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
+                      <span className="text-emerald-400 font-semibold">£{Number(listing.price).toFixed(2)}</span>
+                      <span>Qty: {listing.quantity}</span>
+                      <span className="font-mono text-slate-600">#{listing.ebayItemId}</span>
+                    </div>
+                  </div>
+                  {/* Action */}
+                  {listing.alreadyInInventory ? (
+                    <span className="flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-400 flex-shrink-0">
+                      <CheckCircle size={11} /> In Inventory
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => addListingToInventory(listing)}
+                      disabled={addingItem === listing.ebayItemId}
+                      className="flex items-center gap-1.5 rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300 hover:bg-blue-500/20 disabled:opacity-50 transition flex-shrink-0">
+                      {addingItem === listing.ebayItemId ? (
+                        <RefreshCw size={11} className="animate-spin" />
+                      ) : (
+                        <Plus size={11} />
+                      )}
+                      {addingItem === listing.ebayItemId ? "Adding..." : "Add to Inventory"}
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {syncResult && (
           <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm text-red-300">
             {syncResult}
           </div>
@@ -220,7 +354,12 @@ export default function EbayTab() {
           <button onClick={handleSync} disabled={syncing}
             className="flex items-center gap-2 rounded-2xl border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-300 transition hover:bg-blue-500/20 disabled:opacity-50">
             <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
-            {syncing ? "Syncing..." : "Sync Now"}
+            {syncing ? "Syncing..." : "Sync Sales"}
+          </button>
+          <button onClick={fetchListings} disabled={loadingListings}
+            className="flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50">
+            <Package size={14} className={loadingListings ? "animate-spin" : ""} />
+            {loadingListings ? "Loading..." : "Import Listings"}
           </button>
           <button onClick={handleDisconnect} disabled={disconnecting}
             className="flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-300 transition hover:bg-red-500/20 disabled:opacity-50">
@@ -228,6 +367,76 @@ export default function EbayTab() {
           </button>
         </div>
       </div>
+
+      {/* Listings import panel */}
+      {showListingsPanel && (
+        <div className="rounded-[20px] border border-emerald-500/15 bg-[#071021] overflow-hidden">
+          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+            <div>
+              <p className="text-sm font-semibold text-white">Your Active eBay Listings</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {listings.filter(l => !l.alreadyInInventory).length} new •{" "}
+                {listings.filter(l => l.alreadyInInventory).length} already in inventory
+              </p>
+            </div>
+            <button onClick={() => { setShowListingsPanel(false); setListingsMsg(null); }}
+              className="text-slate-500 hover:text-white transition text-lg leading-none">✕</button>
+          </div>
+
+          {listingsMsg && (
+            <div className="mx-5 mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2.5 text-sm text-emerald-300">
+              {listingsMsg}
+            </div>
+          )}
+
+          <div className="divide-y divide-white/5">
+            {listings.length === 0 ? (
+              <p className="px-5 py-8 text-center text-sm text-slate-500">No active listings found on your eBay account.</p>
+            ) : (
+              listings.map(listing => (
+                <div key={listing.ebayItemId} className={`flex items-center gap-4 px-5 py-4 transition hover:bg-white/[0.02] ${listing.alreadyInInventory ? "opacity-50" : ""}`}>
+                  {/* Thumbnail */}
+                  {listing.imageUrl ? (
+                    <img src={listing.imageUrl} alt={listing.title}
+                      className="h-14 w-14 flex-shrink-0 rounded-xl object-contain border border-white/10 bg-black/20 p-1" />
+                  ) : (
+                    <div className="h-14 w-14 flex-shrink-0 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center">
+                      <Package size={20} className="text-slate-600" />
+                    </div>
+                  )}
+                  {/* Details */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{listing.title}</p>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
+                      <span className="text-emerald-400 font-semibold">£{Number(listing.price).toFixed(2)}</span>
+                      <span>Qty: {listing.quantity}</span>
+                      <span className="font-mono text-slate-600">#{listing.ebayItemId}</span>
+                    </div>
+                  </div>
+                  {/* Action */}
+                  {listing.alreadyInInventory ? (
+                    <span className="flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-400 flex-shrink-0">
+                      <CheckCircle size={11} /> In Inventory
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => addListingToInventory(listing)}
+                      disabled={addingItem === listing.ebayItemId}
+                      className="flex items-center gap-1.5 rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300 hover:bg-blue-500/20 disabled:opacity-50 transition flex-shrink-0">
+                      {addingItem === listing.ebayItemId ? (
+                        <RefreshCw size={11} className="animate-spin" />
+                      ) : (
+                        <Plus size={11} />
+                      )}
+                      {addingItem === listing.ebayItemId ? "Adding..." : "Add to Inventory"}
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {syncResult && (
         <div className="flex items-center gap-2 rounded-2xl border border-emerald-500/15 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
