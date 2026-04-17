@@ -6,6 +6,12 @@ function formatPrice(price: string | number) {
   return `£${num.toFixed(2)}`;
 }
 
+const PRIORITY_CONFIG: Record<string, { label: string; color: number }> = {
+  instant_cop:      { label: "⚡ INSTANT COP",      color: 0xef4444 },
+  profitable:       { label: "💰 PROFITABLE",        color: 0x22c55e },
+  personal_bargain: { label: "🛒 PERSONAL BARGAIN",  color: 0x3b82f6 },
+};
+
 function cleanTag(tag: string) {
   return tag.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
 }
@@ -86,6 +92,7 @@ export async function POST(req: NextRequest) {
     const postToX = String(formData.get("postToX")) === "true";
     const postToFacebook = String(formData.get("postToFacebook")) === "true";
     const postToWebsite = String(formData.get("postToWebsite")) === "true";
+    const priority = String(formData.get("priority") || "instant_cop");
     const imageFile = formData.get("imageFile") as File | null;
 
     // Use productTitle for Discord/X if available, otherwise description
@@ -128,7 +135,9 @@ export async function POST(req: NextRequest) {
           return p && w && w > p ? ` • Save ${Math.round((1 - p / w) * 100)}%` : "";
         })() : "";
 
+        const priorityCfg = PRIORITY_CONFIG[priority] ?? PRIORITY_CONFIG.instant_cop;
         const fields = [
+          { name: "Priority", value: priorityCfg.label, inline: false },
           { name: "Price", value: `${formatPrice(price)}${wasPart}${savePart}`, inline: true },
           ...(category ? [{ name: "Category", value: category, inline: true }] : []),
           ...(badge ? [{ name: "Badge", value: badge, inline: true }] : []),
@@ -138,7 +147,7 @@ export async function POST(req: NextRequest) {
         const embed: Record<string, unknown> = {
           title,
           description: discordXDescription,
-          color: destination === "sneakers" ? 5763719 : 3447003,
+          color: (PRIORITY_CONFIG[priority] ?? PRIORITY_CONFIG.instant_cop).color,
           fields,
           footer: { text: footer },
         };
