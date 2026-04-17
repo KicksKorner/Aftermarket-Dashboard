@@ -71,6 +71,16 @@ export default async function AdminOverviewPage() {
               Create and update member training guides.
             </p>
           </Link>
+
+          <Link
+  href="/admin/pokemon-investments"
+  className="rounded-[24px] border border-yellow-500/20 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-yellow-400/30"
+>
+  <h2 className="text-xl font-semibold">🃏 Pokémon Investments</h2>
+  <p className="mt-2 text-sm text-slate-400">
+    Compose and send weekly investment breakdowns to Discord.
+  </p>
+</Link>
         </div>
       </div>
     </main>
