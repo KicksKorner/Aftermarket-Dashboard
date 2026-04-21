@@ -1,9 +1,45 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Calculator, TrendingUp, TrendingDown } from "lucide-react";
+import { Calculator, TrendingUp, TrendingDown, Package, ShoppingCart } from "lucide-react";
 
 type SellerType = "business" | "private";
+type Platform = "ebay" | "amazon";
+
+const AMAZON_CATEGORIES = [
+  { label: "Baby Products (8%)", referral: 0.08 },
+  { label: "Beauty (8%)", referral: 0.08 },
+  { label: "Books (15%)", referral: 0.15 },
+  { label: "Camera & Photo (8%)", referral: 0.08 },
+  { label: "Clothing & Accessories (15%)", referral: 0.15 },
+  { label: "Consumer Electronics (8%)", referral: 0.08 },
+  { label: "DVD & Blu-ray (15%)", referral: 0.15 },
+  { label: "Garden & Outdoors (15%)", referral: 0.15 },
+  { label: "Grocery & Gourmet (8%)", referral: 0.08 },
+  { label: "Health & Personal Care (8%)", referral: 0.08 },
+  { label: "Home & Garden (15%)", referral: 0.15 },
+  { label: "Jewellery (20%)", referral: 0.20 },
+  { label: "Kitchen & Home (15%)", referral: 0.15 },
+  { label: "Music (15%)", referral: 0.15 },
+  { label: "Office Products (15%)", referral: 0.15 },
+  { label: "Pet Supplies (15%)", referral: 0.15 },
+  { label: "Shoes & Bags (15%)", referral: 0.15 },
+  { label: "Sports (15%)", referral: 0.15 },
+  { label: "Toys & Games (15%)", referral: 0.15 },
+  { label: "Video Games (15%)", referral: 0.15 },
+  { label: "Watches (15%)", referral: 0.15 },
+];
+
+const FBA_TIERS = [
+  { label: "Small Envelope (< 100g)", fee: 1.93 },
+  { label: "Standard Envelope (< 200g)", fee: 2.18 },
+  { label: "Large Envelope (< 500g)", fee: 2.51 },
+  { label: "Small Parcel (< 1kg)", fee: 2.87 },
+  { label: "Standard Parcel (< 3kg)", fee: 3.45 },
+  { label: "Large Parcel (< 6kg)", fee: 5.09 },
+  { label: "Extra Large Parcel (< 15kg)", fee: 6.49 },
+  { label: "Special Oversize", fee: 8.99 },
+];
 
 const BUSINESS_CATEGORIES = [
   { label: "General / Most categories (12.55%)", fvf: 0.1255 },
@@ -32,6 +68,9 @@ function pct(n: number) {
 }
 
 export default function ProfitCalculatorPage() {
+  const [platform, setPlatform] = useState<Platform>("ebay");
+
+  // eBay states
   const [sellerType, setSellerType] = useState<SellerType>("business");
   const [categoryIndex, setCategoryIndex] = useState(0);
   const [buyPrice, setBuyPrice] = useState("");
@@ -42,6 +81,15 @@ export default function ProfitCalculatorPage() {
   const [topRated, setTopRated] = useState(false);
   const [international, setInternational] = useState(false);
   const [promotedRate, setPromotedRate] = useState(0);
+
+  // Amazon states
+  const [amzCategoryIdx, setAmzCategoryIdx] = useState(0);
+  const [amzFbaIdx, setAmzFbaIdx] = useState(3);
+  const [amzBuyPrice, setAmzBuyPrice] = useState("");
+  const [amzSellPrice, setAmzSellPrice] = useState("");
+  const [amzQuantity, setAmzQuantity] = useState("1");
+  const [amzShipToAmz, setAmzShipToAmz] = useState("");
+  const [amzVatRegistered, setAmzVatRegistered] = useState(false);
 
   const categories = sellerType === "business" ? BUSINESS_CATEGORIES : PRIVATE_CATEGORIES;
   const safeIndex = Math.min(categoryIndex, categories.length - 1);
@@ -116,6 +164,30 @@ export default function ProfitCalculatorPage() {
 
   const profitPositive = calc.netProfit >= 0;
 
+  // Amazon calc
+  const amzCalc = useMemo(() => {
+    const buy = parseFloat(amzBuyPrice) || 0;
+    const sell = parseFloat(amzSellPrice) || 0;
+    const qty = parseInt(amzQuantity) || 1;
+    const shipIn = parseFloat(amzShipToAmz) || 0;
+    const cat = AMAZON_CATEGORIES[amzCategoryIdx];
+    const fba = FBA_TIERS[amzFbaIdx];
+    const referralFee = sell * cat.referral;
+    const fbaFee = fba.fee;
+    const vatOnFees = amzVatRegistered ? (referralFee + fbaFee) * 0.20 : 0;
+    const totalAmzFees = referralFee + fbaFee + vatOnFees;
+    const stockCost = buy * qty;
+    const totalCost = stockCost + shipIn + (totalAmzFees * qty);
+    const totalRevenue = sell * qty;
+    const netProfit = totalRevenue - totalCost;
+    const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+    const roi = stockCost > 0 ? (netProfit / stockCost) * 100 : 0;
+    const breakEven = buy > 0 ? (buy + shipIn / qty + fbaFee) / (1 - cat.referral * (amzVatRegistered ? 1.2 : 1)) : 0;
+    return { referralFee, fbaFee, vatOnFees, totalAmzFees, stockCost, shipIn: shipIn, totalCost, totalRevenue, netProfit, margin, roi, breakEven };
+  }, [amzBuyPrice, amzSellPrice, amzQuantity, amzShipToAmz, amzVatRegistered, amzCategoryIdx, amzFbaIdx]);
+
+  const amzProfitPositive = amzCalc.netProfit >= 0;
+
   function numInput(
     label: string,
     value: string,
@@ -179,12 +251,27 @@ export default function ProfitCalculatorPage() {
           <Calculator size={22} />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">eBay Profit Calculator</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Profit Calculator</h1>
           <p className="text-sm text-slate-400">UK fee & margin calculator — updated Apr 2026</p>
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
+      {/* Platform switcher */}
+      <div className="grid grid-cols-2 gap-3 max-w-xs">
+        <button onClick={() => setPlatform("ebay")}
+          className={`flex items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold transition
+            ${platform === "ebay" ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" : "border border-white/10 bg-white/5 text-slate-400 hover:text-white"}`}>
+          <ShoppingCart size={15} /> eBay
+        </button>
+        <button onClick={() => setPlatform("amazon")}
+          className={`flex items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold transition
+            ${platform === "amazon" ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20" : "border border-white/10 bg-white/5 text-slate-400 hover:text-white"}`}>
+          <Package size={15} /> Amazon FBA
+        </button>
+      </div>
+
+      {/* ── eBay Calculator ── */}
+      {platform === "ebay" && <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
 
         {/* LEFT — inputs */}
         <div className="space-y-4">
@@ -355,7 +442,107 @@ export default function ProfitCalculatorPage() {
             </div>
           </div>
         </div>
-      </div>
+      </div>}
+
+      {/* ── Amazon FBA Calculator ── */}
+      {platform === "amazon" && (
+        <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
+          {/* LEFT — Amazon inputs */}
+          <div className="space-y-4">
+            <div className="rounded-[24px] border border-orange-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-5">
+              <p className="mb-3 text-xs font-medium uppercase tracking-[0.1em] text-slate-500">Category</p>
+              <select value={amzCategoryIdx} onChange={e => setAmzCategoryIdx(Number(e.target.value))}
+                className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-sm text-white outline-none focus:border-orange-400/40">
+                {AMAZON_CATEGORIES.map((c, i) => <option key={i} value={i}>{c.label}</option>)}
+              </select>
+            </div>
+
+            <div className="rounded-[24px] border border-orange-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-5">
+              <p className="mb-3 text-xs font-medium uppercase tracking-[0.1em] text-slate-500">FBA Fulfilment Tier</p>
+              <select value={amzFbaIdx} onChange={e => setAmzFbaIdx(Number(e.target.value))}
+                className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-sm text-white outline-none focus:border-orange-400/40">
+                {FBA_TIERS.map((t, i) => <option key={i} value={i}>{t.label} — £{t.fee.toFixed(2)}</option>)}
+              </select>
+            </div>
+
+            <div className="rounded-[24px] border border-orange-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-5">
+              <p className="mb-4 text-xs font-medium uppercase tracking-[0.1em] text-slate-500">Prices</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {numInput("Buy / Cost Price", amzBuyPrice, setAmzBuyPrice)}
+                {numInput("Sell Price (on Amazon)", amzSellPrice, setAmzSellPrice)}
+                {numInput("Quantity", amzQuantity, setAmzQuantity, "", "1")}
+                {numInput("Shipping to Amazon (total)", amzShipToAmz, setAmzShipToAmz)}
+              </div>
+            </div>
+
+            <div className="rounded-[24px] border border-orange-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-5">
+              <p className="mb-4 text-xs font-medium uppercase tracking-[0.1em] text-slate-500">Options</p>
+              {toggle("VAT Registered", "Adds 20% VAT on Amazon fees", amzVatRegistered, setAmzVatRegistered)}
+            </div>
+          </div>
+
+          {/* RIGHT — Amazon results */}
+          <div className="space-y-4">
+            <div className="rounded-[24px] border border-orange-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-6 text-center">
+              <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Net Profit</p>
+              <div className={`flex items-center justify-center gap-2 text-5xl font-bold tracking-tight ${amzProfitPositive ? "text-emerald-400" : "text-red-400"}`}>
+                {amzProfitPositive ? <TrendingUp size={32} /> : <TrendingDown size={32} />}
+                {amzProfitPositive ? "+" : ""}£{fmt(amzCalc.netProfit)}
+              </div>
+              <div className="mt-5 grid grid-cols-3 divide-x divide-white/10 rounded-2xl border border-white/10 bg-white/5">
+                <div className="py-3 text-center">
+                  <p className="text-xs uppercase tracking-[0.1em] text-slate-500">Margin</p>
+                  <p className={`mt-1 text-lg font-semibold ${amzCalc.margin >= 0 ? "text-emerald-400" : "text-red-400"}`}>{pct(amzCalc.margin)}%</p>
+                </div>
+                <div className="py-3 text-center">
+                  <p className="text-xs uppercase tracking-[0.1em] text-slate-500">ROI</p>
+                  <p className={`mt-1 text-lg font-semibold ${amzCalc.roi >= 0 ? "text-emerald-400" : "text-red-400"}`}>{amzCalc.roi !== 0 ? `${pct(amzCalc.roi)}%` : "—"}</p>
+                </div>
+                <div className="py-3 text-center">
+                  <p className="text-xs uppercase tracking-[0.1em] text-slate-500">Revenue</p>
+                  <p className="mt-1 text-lg font-semibold text-white">£{fmt(amzCalc.totalRevenue)}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-[24px] border border-orange-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-5">
+              <p className="mb-1 text-xs font-medium uppercase tracking-[0.1em] text-slate-500">Amazon Fee Breakdown</p>
+              <div className="divide-y divide-white/5">
+                {row(`Referral Fee (${pct(AMAZON_CATEGORIES[amzCategoryIdx].referral * 100)}%)`, `£${fmt(amzCalc.referralFee)}`)}
+                {row(`FBA Fulfilment Fee`, `£${fmt(amzCalc.fbaFee)}`)}
+                {amzVatRegistered && row("VAT on fees (20%)", `£${fmt(amzCalc.vatOnFees)}`)}
+              </div>
+              <div className="mt-2 border-t border-white/10 pt-3 flex items-center justify-between text-sm font-semibold">
+                <span className="text-white">Total Amazon Fees</span>
+                <span className="text-amber-400">£{fmt(amzCalc.totalAmzFees)}</span>
+              </div>
+            </div>
+
+            <div className="rounded-[24px] border border-orange-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-5">
+              <p className="mb-1 text-xs font-medium uppercase tracking-[0.1em] text-slate-500">Cost Breakdown</p>
+              <div className="divide-y divide-white/5">
+                {row("Stock cost", `£${fmt(amzCalc.stockCost)}`)}
+                {row("Shipping to Amazon", `£${fmt(amzCalc.shipIn)}`)}
+                {row("Amazon fees (per unit × qty)", `£${fmt(amzCalc.totalAmzFees * (parseInt(amzQuantity) || 1))}`)}
+              </div>
+              <div className="mt-2 border-t border-white/10 pt-3 flex items-center justify-between text-sm font-semibold">
+                <span className="text-white">Total Cost</span>
+                <span className="text-amber-400">£{fmt(amzCalc.totalCost)}</span>
+              </div>
+            </div>
+
+            <div className="rounded-[24px] border border-orange-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-5">
+              <p className="mb-1 text-xs font-medium uppercase tracking-[0.1em] text-slate-500">Target Prices</p>
+              <div className="divide-y divide-white/5">
+                <div className="flex items-center justify-between py-2.5 text-sm">
+                  <span className="text-slate-400">Break-even sell price</span>
+                  <span className="font-semibold text-white">{amzCalc.breakEven > 0 ? `£${fmt(amzCalc.breakEven)}` : "—"}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

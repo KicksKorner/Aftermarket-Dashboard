@@ -4,6 +4,7 @@ import {
   BookOpen, Video, Boxes, Receipt, Mail, Footprints, Lock, ShoppingBag,
   Ticket, TrendingUp, PoundSterling, Package, AlertTriangle, Calculator,
 } from "lucide-react";
+import SourcingWidget from "@/components/SourcingWidget";
 import NotificationBell from "@/components/NotificationBell";
 
 const accessLevelClass: Record<string, string> = {
@@ -284,39 +285,7 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* Upcoming ticket deadlines */}
-        <div className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.72),rgba(5,10,26,0.88))] p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertTriangle size={16} className="text-amber-400" />
-              <h3 className="text-base font-semibold text-white">Upcoming Ticket Deadlines</h3>
-            </div>
-            <Link href="/dashboard/tickets" className="text-xs text-slate-500 hover:text-white">View all →</Link>
-          </div>
-          {urgentTickets.length > 0 ? (
-            <div className="space-y-2">
-              {urgentTickets.map((ticket) => {
-                const days = Math.ceil((new Date(ticket.transfer_deadline!).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                return (
-                  <div key={ticket.id} className={`flex items-center justify-between rounded-xl border px-3 py-2.5 ${
-                    days <= 1 ? "border-red-500/20 bg-red-500/10" : "border-amber-500/15 bg-amber-500/8"
-                  }`}>
-                    <p className="truncate text-sm text-white max-w-[200px]">{ticket.event_name}</p>
-                    <span className={`flex-shrink-0 text-xs font-semibold ${days <= 1 ? "text-red-300" : "text-amber-300"}`}>
-                      {days === 0 ? "TODAY" : `${days}d left`}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <Ticket size={24} className="mb-2 text-slate-700" />
-              <p className="text-sm text-slate-500">No upcoming deadlines.</p>
-              <Link href="/dashboard/tickets" className="mt-2 text-xs text-blue-400 hover:text-blue-300">Add tickets →</Link>
-            </div>
-          )}
-        </div>
+        <SourcingWidget />
       </section>
 
       {/* Feature cards */}

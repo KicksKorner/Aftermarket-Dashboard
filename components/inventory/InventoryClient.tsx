@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   Package, CheckSquare, Coins, PoundSterling, TrendingUp, Lock,
-  LayoutDashboard, ShoppingCart, Tag, Receipt, Boxes, FileSpreadsheet,
+  LayoutDashboard, ShoppingCart, Tag, Receipt, Boxes, FileSpreadsheet, Star, RefreshCw, Loader2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import AddItemModal from "@/components/inventory/AddItemModal";
@@ -26,7 +26,7 @@ import {
 const supabase = createClient();
 type FilterType = "all" | "in_stock" | "sold";
 type SaleWithBuyPrice = InventorySale & { buy_price_per_unit: number };
-type TabType = "overview" | "inventory" | "ebay" | "amazon" | "vinted" | "receipts";
+type TabType = "overview" | "inventory" | "replenishables" | "ebay" | "amazon" | "vinted" | "receipts";
 
 export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -45,6 +45,8 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
   const [notesSaved, setNotesSaved] = useState(false);
   const [notesLoading, setNotesLoading] = useState(true);
   const [showSalesCard, setShowSalesCard] = useState(false);
+  const [togglingReplen, setTogglingReplen] = useState<string | null>(null);
+  const [reorderNotes, setReorderNotes] = useState<Record<string, string>>({});
   const [salesCardItem, setSalesCardItem] = useState<{
     id: string;
     item_name: string;
@@ -170,6 +172,21 @@ const statCards = [
     if (!error) fetchData();
   }
 
+  async function toggleReplenishable(item: InventoryItem) {
+    setTogglingReplen(item.id);
+    await supabase.from("inventory_items").update({
+      is_replenishable: !(item as any).is_replenishable,
+    }).eq("id", item.id);
+    await fetchData();
+    setTogglingReplen(null);
+  }
+
+  async function saveReorderNote(itemId: string) {
+    await supabase.from("inventory_items").update({
+      reorder_note: reorderNotes[itemId] || null,
+    }).eq("id", itemId);
+  }
+
   function handleDownloadTemplate() {
     if (!isPremium) return;
     const csv = ["item_name,buy_price,quantity,return_window_days,purchase_date", "Pokemon 151 ETB,32.99,25,14,2026-03-15"].join("\n");
@@ -198,6 +215,7 @@ const statCards = [
   const tabs = [
     { id: "overview" as TabType, label: "Overview", icon: LayoutDashboard, premiumOnly: false },
     { id: "inventory" as TabType, label: "Inventory", icon: Boxes, premiumOnly: false },
+    { id: "replenishables" as TabType, label: "Replenishables", icon: Star, premiumOnly: false },
     { id: "ebay" as TabType, label: "eBay", icon: ShoppingCart, premiumOnly: true },
     { id: "amazon" as TabType, label: "Amazon", icon: Package, premiumOnly: true },
     { id: "vinted" as TabType, label: "Vinted", icon: Tag, premiumOnly: true },
@@ -453,6 +471,14 @@ const statCards = [
                             <td className="px-4 py-4 text-slate-300">{item.sold_date ?? "-"}</td>
                             <td className="px-4 py-4">
                               <div className="flex flex-wrap gap-2">
+                                <button
+                                  onClick={() => toggleReplenishable(item)}
+                                  disabled={togglingReplen === item.id}
+                                  title={(item as any).is_replenishable ? "Remove from replenishables" : "Add to replenishables"}
+                                  className={`rounded-xl border px-3 py-2 text-xs transition ${(item as any).is_replenishable ? "border-amber-500/20 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" : "border-white/10 bg-white/5 text-slate-500 hover:text-amber-400"}`}
+                                >
+                                  {togglingReplen === item.id ? "..." : "⭐"}
+                                </button>
                                 <button onClick={() => handleOpenEditModal(item)} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:bg-white/10">Edit</button>
                                 {Number(item.quantity_remaining) > 0 && (
                                   <button onClick={() => handleOpenSoldModal(item)} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:bg-white/10">Mark Sold</button>
@@ -477,6 +503,92 @@ const statCards = [
               </div>
             </>
           )}
+
+          {/* ── REPLENISHABLES TAB ── */}
+          {activeTab === "replenishables" && (() => {
+            const replenItems = items.filter((i: any) => i.is_replenishable);
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold">Replenishables</h2>
+                    <p className="mt-1 text-sm text-slate-400">Items flagged as strong sellers — reorder when stock runs low.</p>
+                  </div>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400">{replenItems.length} item{replenItems.length !== 1 ? "s" : ""}</span>
+                </div>
+
+                {replenItems.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center rounded-[20px] border border-white/10 bg-[#081120]/50">
+                    <Star size={32} className="mb-3 text-slate-600" />
+                    <p className="text-base font-semibold text-white">No replenishables yet</p>
+                    <p className="mt-1 text-sm text-slate-500">Go to the Inventory tab and click the ⭐ star on items that sell well.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-[20px] border border-white/10 bg-[#081120]/80">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[700px] text-sm">
+                        <thead className="border-b border-white/10 bg-white/5 text-left text-slate-400">
+                          <tr>
+                            <th className="px-4 py-3 font-medium">Item</th>
+                            <th className="px-4 py-3 font-medium">Buy Price</th>
+                            <th className="px-4 py-3 font-medium">In Stock</th>
+                            <th className="px-4 py-3 font-medium">Units Sold</th>
+                            <th className="px-4 py-3 font-medium">Reorder Note</th>
+                            <th className="px-4 py-3 font-medium">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {replenItems.map((item: any) => (
+                            <tr key={item.id} className={`border-b border-white/5 hover:bg-white/[0.02] ${item.quantity_remaining === 0 ? "bg-red-500/5" : ""}`}>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <Star size={13} className="text-amber-400 flex-shrink-0 fill-amber-400" />
+                                  <span className="font-medium text-white">{item.item_name}</span>
+                                  {item.quantity_remaining === 0 && (
+                                    <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-xs text-red-400">OUT OF STOCK</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-slate-300">£{Number(item.buy_price).toFixed(2)}</td>
+                              <td className="px-4 py-3">
+                                <span className={`font-medium ${item.quantity_remaining <= 2 ? "text-amber-400" : "text-slate-300"}`}>
+                                  {item.quantity_remaining}
+                                  {item.quantity_remaining <= 2 && item.quantity_remaining > 0 && <span className="ml-1 text-xs">⚠️</span>}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-slate-300">{item.quantity_sold ?? 0}</td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    value={reorderNotes[item.id] ?? item.reorder_note ?? ""}
+                                    onChange={e => setReorderNotes(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                    placeholder="e.g. Order from Argos when < 3 left"
+                                    className="w-52 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white outline-none placeholder:text-slate-600 focus:border-blue-400/30"
+                                  />
+                                  <button onClick={() => saveReorderNote(item.id)}
+                                    className="text-xs text-slate-500 hover:text-blue-400 transition">Save</button>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <button
+                                  onClick={() => toggleReplenishable(item)}
+                                  disabled={togglingReplen === item.id}
+                                  className="flex items-center gap-1.5 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-500/20 transition disabled:opacity-50"
+                                >
+                                  {togglingReplen === item.id ? <Loader2 size={11} className="animate-spin" /> : <Star size={11} />}
+                                  Unstar
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Premium-locked overlay */}
           {(activeTab === "ebay" || activeTab === "vinted" || activeTab === "receipts") && !isPremium && (
