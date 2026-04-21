@@ -13,6 +13,7 @@ import MonthlyProfitChart from "@/components/inventory/MonthlyProfitChart";
 import ExportCsvModal from "@/components/inventory/ExportCsvModal";
 import BulkImportModal from "@/components/inventory/BulkImportModal";
 import EbayTab from "@/components/inventory/EbayTab";
+import AmazonTab from "@/components/inventory/AmazonTab";
 import VintedTab from "@/components/inventory/VintedTab";
 import ReceiptHubTab from "@/components/inventory/ReceiptHubTab";
 import SalesCardModal from "@/components/inventory/SalesCardModal";
@@ -25,7 +26,7 @@ import {
 const supabase = createClient();
 type FilterType = "all" | "in_stock" | "sold";
 type SaleWithBuyPrice = InventorySale & { buy_price_per_unit: number };
-type TabType = "overview" | "inventory" | "ebay" | "vinted" | "receipts";
+type TabType = "overview" | "inventory" | "ebay" | "amazon" | "vinted" | "receipts";
 
 export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -198,6 +199,7 @@ const statCards = [
     { id: "overview" as TabType, label: "Overview", icon: LayoutDashboard, premiumOnly: false },
     { id: "inventory" as TabType, label: "Inventory", icon: Boxes, premiumOnly: false },
     { id: "ebay" as TabType, label: "eBay", icon: ShoppingCart, premiumOnly: true },
+    { id: "amazon" as TabType, label: "Amazon", icon: Package, premiumOnly: true },
     { id: "vinted" as TabType, label: "Vinted", icon: Tag, premiumOnly: true },
     { id: "receipts" as TabType, label: "Receipt Hub", icon: Receipt, premiumOnly: true },
   ];
@@ -491,6 +493,7 @@ const statCards = [
           )}
 
           {activeTab === "ebay" && isPremium && <EbayTab />}
+          {activeTab === "amazon" && isPremium && <AmazonTab />}
           {activeTab === "vinted" && isPremium && <VintedTab />}
           {activeTab === "receipts" && isPremium && <ReceiptHubTab />}
         </section>
