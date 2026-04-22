@@ -8,16 +8,15 @@ export async function GET() {
 
   const { data: conn } = await supabase
     .from("ebay_connections")
-    .select("access_token, refresh_token, token_expires_at, ebay_username")
+    .select("access_token, refresh_token, token_expires_at")
     .eq("user_id", user.id)
     .single();
 
   if (!conn?.access_token) return NextResponse.json({ error: "No eBay connection" }, { status: 404 });
 
   let token = conn.access_token;
-  let username = conn.ebay_username;
 
-  // Refresh token if near expiry
+  // Refresh if needed
   const expiresAt = new Date(conn.token_expires_at);
   if (expiresAt <= new Date(Date.now() + 60000)) {
     const credentials = Buffer.from(`${process.env.EBAY_CLIENT_ID}:${process.env.EBAY_CLIENT_SECRET}`).toString("base64");
@@ -36,43 +35,59 @@ export async function GET() {
     }
   }
 
-  // If we don't have username yet, fetch it via identity API
-  if (!username) {
-    try {
-      const idRes = await fetch("https://apiz.ebay.com/commerce/identity/v1/user/", {
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      });
-      if (idRes.ok) {
-        const idData = await idRes.json();
-        username = idData.username || "";
-        if (username) {
-          await supabase.from("ebay_connections").update({ ebay_username: username }).eq("user_id", user.id);
-        }
-      }
-    } catch {}
-  }
-
-  if (!username) return NextResponse.json({ error: "Could not get eBay username" }, { status: 404 });
-
-  // Shopping API - public, no user token needed, just App ID
-  const appId = process.env.EBAY_CLIENT_ID!;
-  const shopRes = await fetch(
-    `https://open.api.ebay.com/shopping?callname=GetUserProfile&version=967&siteid=3&appid=${appId}&UserID=${encodeURIComponent(username)}&IncludeSelector=FeedbackHistory&responseencoding=JSON`
+  // Use sell.reputation.readonly to get feedback score
+  const res = await fetch(
+    "https://api.ebay.com/sell/reputation/v1/seller_standards_profile",
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "X-EBAY-C-MARKETPLACE-ID": "EBAY_GB",
+      },
+    }
   );
 
-  if (!shopRes.ok) {
-    console.error("eBay Shopping API error:", shopRes.status);
-    return NextResponse.json({ error: "eBay Shopping API error" }, { status: 500 });
+  console.log("Reputation API status:", res.status);
+
+  if (res.ok) {
+    const data = await res.json();
+    console.log("Reputation data:", JSON.stringify(data).substring(0, 300));
+    // Try to extract feedback score from reputation data
+    const score = data.feedbackScore ?? data.overall_performance ?? 0;
+    const percentage = data.positiveFeedbackPercent ?? 100;
+    return NextResponse.json({ score, percentage });
   }
 
-  const shopData = await shopRes.json();
-  const userInfo = shopData.User;
+  // Fallback: use Trading API GetMyeBaySelling to get feedback
+  const xmlBody = `<?xml version="1.0" encoding="utf-8"?>
+<GetUserRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <RequesterCredentials>
+    <ebl:IAFToken xmlns:ebl="urn:ebay:apis:eBLBaseComponents">${token}</ebl:IAFToken>
+  </RequesterCredentials>
+</GetUserRequest>`;
 
-  if (!userInfo) return NextResponse.json({ error: "User not found" }, { status: 404 });
-
-  return NextResponse.json({
-    score: userInfo.FeedbackScore ?? 0,
-    percentage: userInfo.PositiveFeedbackPercent ?? 0,
-    username,
+  const tradingRes = await fetch("https://api.ebay.com/ws/api.dll", {
+    method: "POST",
+    headers: {
+      "X-EBAY-API-SITEID": "3",
+      "X-EBAY-API-COMPATIBILITY-LEVEL": "967",
+      "X-EBAY-API-CALL-NAME": "GetUser",
+      "Content-Type": "text/xml",
+    },
+    body: xmlBody,
   });
+
+  console.log("Trading API status:", tradingRes.status);
+
+  if (tradingRes.ok) {
+    const xml = await tradingRes.text();
+    console.log("Trading API response:", xml.substring(0, 500));
+    const score = parseInt(xml.match(/<FeedbackScore>(\d+)<\/FeedbackScore>/)?.[1] || "0");
+    const percentage = parseFloat(xml.match(/<PositiveFeedbackPercent>([\d.]+)<\/PositiveFeedbackPercent>/)?.[1] || "0");
+    if (score > 0 || percentage > 0) {
+      return NextResponse.json({ score, percentage });
+    }
+  }
+
+  return NextResponse.json({ error: "Could not fetch feedback score" }, { status: 500 });
 }
