@@ -5,6 +5,7 @@ import {
   Ticket, TrendingUp, PoundSterling, Package, AlertTriangle, Calculator,
 } from "lucide-react";
 import SourcingWidget from "@/components/SourcingWidget";
+import SellerAnalytics from "@/components/SellerAnalytics";
 import NotificationBell from "@/components/NotificationBell";
 
 const accessLevelClass: Record<string, string> = {
@@ -252,6 +253,9 @@ export default async function DashboardPage() {
           </Link>
         </div>
       </section>
+
+      {/* Seller Analytics */}
+      <SellerAnalytics />
 
       {/* Recent activity + upcoming deadlines */}
       <section className="grid gap-4 xl:grid-cols-2">
