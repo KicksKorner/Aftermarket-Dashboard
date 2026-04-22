@@ -95,9 +95,9 @@ export async function POST() {
   // Try fetching sold items using the correct Vinted endpoint
   // Try multiple endpoints as Vinted changes these periodically
   const endpoints = [
-    `https://www.vinted.co.uk/api/v2/my_orders?type=sold&status=completed&per_page=100&page=1`,
     `https://www.vinted.co.uk/api/v2/my_orders?type=sold&per_page=100&page=1`,
-    `https://www.vinted.co.uk/api/v2/my_orders?status=completed&per_page=100&page=1`,
+    `https://www.vinted.co.uk/api/v2/my_orders?type=sold&status=completed&per_page=100&page=1`,
+    `https://www.vinted.co.uk/api/v2/my_orders?type=sold&status=in_progress&per_page=100&page=1`,
   ];
 
   let txRes: Response | null = null;
