@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { ShoppingCart, RefreshCw, Unlink, CheckCircle, AlertCircle, Package, Link2, Plus, Trash2 } from "lucide-react";
+import { ShoppingCart, RefreshCw, Unlink, CheckCircle, AlertCircle, Package, Link2, Trash2, Star, MessageSquare, Loader2, TrendingUp, PoundSterling, BarChart3 } from "lucide-react";
 
 const supabase = createClient();
 
@@ -26,13 +26,13 @@ type InventoryItem = {
 
 type ConnectionStatus = "loading" | "connected" | "disconnected";
 
-type EbayListing = {
-  ebayItemId: string;
-  title: string;
-  price: number;
-  quantity: number;
-  imageUrl: string | null;
-  alreadyInInventory: boolean;
+type FeedbackOrder = {
+  orderId: string;
+  itemId: string;
+  transactionId: string;
+  buyerUsername: string;
+  itemTitle: string;
+  saleDate: string;
 };
 
 export default function EbayTab() {
@@ -43,14 +43,16 @@ export default function EbayTab() {
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
   const [matching, setMatching] = useState<string | null>(null);
+  const [selectedMatch, setSelectedMatch] = useState<Record<string, string>>({});
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deletingAll, setDeletingAll] = useState(false);
-  const [selectedMatch, setSelectedMatch] = useState<Record<string, string>>({});
-  const [showListingsPanel, setShowListingsPanel] = useState(false);
-  const [listings, setListings] = useState<EbayListing[]>([]);
-  const [loadingListings, setLoadingListings] = useState(false);
-  const [addingItem, setAddingItem] = useState<string | null>(null);
-  const [listingsMsg, setListingsMsg] = useState<string | null>(null);
+  const [activeSubTab, setActiveSubTab] = useState<"sales" | "feedback">("sales");
+  const [feedbackOrders, setFeedbackOrders] = useState<FeedbackOrder[]>([]);
+  const [loadingFeedback, setLoadingFeedback] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState("Great buyer, fast payment. Highly recommended! A++");
+  const [leavingFeedback, setLeavingFeedback] = useState(false);
+  const [feedbackResult, setFeedbackResult] = useState<{ok: boolean; msg: string} | null>(null);
+  const [selectedFeedback, setSelectedFeedback] = useState<Set<string>>(new Set());
 
   const fetchSales = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -75,81 +77,6 @@ export default function EbayTab() {
       .order("item_name", { ascending: true });
     setInventoryItems((data || []) as InventoryItem[]);
   }, []);
-
-  async function handleDeleteSale(saleId: string) {
-    setDeleting(saleId);
-    await supabase.from("ebay_sales").delete().eq("id", saleId);
-    setDeleting(null);
-    fetchSales();
-  }
-
-  async function handleDeleteAllUnmatched() {
-    if (!window.confirm("Delete all unmatched sales? This cannot be undone.")) return;
-    setDeletingAll(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setDeletingAll(false); return; }
-    await supabase.from("ebay_sales")
-      .delete()
-      .eq("user_id", user.id)
-      .is("matched_inventory_id", null);
-    setDeletingAll(false);
-    fetchSales();
-    setSyncResult("All unmatched sales deleted.");
-  }
-
-  async function fetchListings() {
-    setLoadingListings(true);
-    setListingsMsg(null);
-    setListings([]);
-    setShowListingsPanel(true); // Always open the panel so errors are visible
-    try {
-      const res = await fetch("/api/ebay/sync-listings");
-      const data = await res.json();
-      if (res.ok) {
-        setListings(data.listings || []);
-        if ((data.listings || []).length === 0) {
-          setListingsMsg("No active listings found on your eBay account.");
-        }
-      } else {
-        setListingsMsg(data.error || "Failed to fetch listings.");
-      }
-    } catch (err: any) {
-      setListingsMsg(`Error: ${err?.message || "Failed to fetch listings. Please try again."}`);
-    } finally {
-      setLoadingListings(false);
-    }
-  }
-
-  async function addListingToInventory(listing: EbayListing) {
-    setAddingItem(listing.ebayItemId);
-    try {
-      const res = await fetch("/api/ebay/sync-listings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ebayItemId: listing.ebayItemId,
-          title: listing.title,
-          price: listing.price,
-          quantity: listing.quantity,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        // Mark as added in the list
-        setListings(prev => prev.map(l =>
-          l.ebayItemId === listing.ebayItemId ? { ...l, alreadyInInventory: true } : l
-        ));
-        setListingsMsg(`✅ "${listing.title}" added to inventory. Remember to set the buy price via Edit.`);
-        fetchInventory();
-      } else {
-        setListingsMsg(data.error || "Failed to add item.");
-      }
-    } catch {
-      setListingsMsg("Something went wrong.");
-    } finally {
-      setAddingItem(null);
-    }
-  }
 
   const checkConnection = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -262,6 +189,69 @@ export default function EbayTab() {
     setMatching(null);
   }
 
+  async function handleDeleteSale(saleId: string) {
+    setDeleting(saleId);
+    await supabase.from("ebay_sales").delete().eq("id", saleId);
+    setDeleting(null);
+    fetchSales();
+  }
+
+  async function handleDeleteAllUnmatched() {
+    if (!window.confirm("Delete all unmatched sales? This cannot be undone.")) return;
+    setDeletingAll(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setDeletingAll(false); return; }
+    await supabase.from("ebay_sales").delete().eq("user_id", user.id).is("matched_inventory_id", null);
+    setDeletingAll(false);
+    setSyncResult("All unmatched sales deleted.");
+    fetchSales();
+  }
+
+  async function fetchFeedbackOrders() {
+    setLoadingFeedback(true);
+    setFeedbackResult(null);
+    try {
+      const res = await fetch("/api/ebay/feedback/pending");
+      const data = await res.json();
+      if (res.ok) {
+        setFeedbackOrders(data.orders || []);
+        if ((data.orders || []).length > 0) {
+          setSelectedFeedback(new Set(data.orders.map((o: FeedbackOrder) => o.orderId)));
+        }
+      } else {
+        setFeedbackResult({ ok: false, msg: data.error || "Failed to load pending feedback." });
+      }
+    } catch {
+      setFeedbackResult({ ok: false, msg: "Connection error." });
+    }
+    setLoadingFeedback(false);
+  }
+
+  async function handleLeaveFeedback() {
+    if (selectedFeedback.size === 0) return;
+    setLeavingFeedback(true);
+    setFeedbackResult(null);
+    const ordersToProcess = feedbackOrders.filter(o => selectedFeedback.has(o.orderId));
+    try {
+      const res = await fetch("/api/ebay/feedback/leave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orders: ordersToProcess, message: feedbackMessage }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setFeedbackResult({ ok: true, msg: `✅ Left feedback for ${data.successful} buyer${data.successful !== 1 ? "s" : ""}${data.failed > 0 ? `. ${data.failed} failed.` : "."}` });
+        setFeedbackOrders(prev => prev.filter(o => !selectedFeedback.has(o.orderId)));
+        setSelectedFeedback(new Set());
+      } else {
+        setFeedbackResult({ ok: false, msg: data.error || "Failed to leave feedback." });
+      }
+    } catch {
+      setFeedbackResult({ ok: false, msg: "Connection error." });
+    }
+    setLeavingFeedback(false);
+  }
+
   if (status === "loading") {
     return (
       <div className="flex items-center justify-center py-16 text-slate-500 text-sm">
@@ -285,86 +275,7 @@ export default function EbayTab() {
           <ShoppingCart size={16} />
           Connect eBay Account
         </a>
-        {/* Listings import panel */}
-      {showListingsPanel && (
-        <div className="rounded-[20px] border border-emerald-500/15 bg-[#071021] overflow-hidden">
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-            <div>
-              <p className="text-sm font-semibold text-white">Your Active eBay Listings</p>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {listings.filter(l => !l.alreadyInInventory).length} new •{" "}
-                {listings.filter(l => l.alreadyInInventory).length} already in inventory
-              </p>
-            </div>
-            <button onClick={() => { setShowListingsPanel(false); setListingsMsg(null); }}
-              className="text-slate-500 hover:text-white transition text-lg leading-none">✕</button>
-          </div>
-
-          {listingsMsg && (
-            <div className={`mx-5 mt-4 rounded-xl border px-4 py-2.5 text-sm ${
-              listingsMsg.startsWith("✅")
-                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
-                : "border-red-500/20 bg-red-500/10 text-red-300"
-            }`}>
-              {listingsMsg}
-            </div>
-          )}
-
-          <div className="divide-y divide-white/5">
-            {loadingListings ? (
-              <div className="flex items-center justify-center gap-3 px-5 py-10 text-sm text-slate-400">
-                <RefreshCw size={16} className="animate-spin" />
-                Fetching your active eBay listings...
-              </div>
-            ) : listings.length === 0 && !listingsMsg ? (
-              <p className="px-5 py-8 text-center text-sm text-slate-500">No active listings found on your eBay account.</p>
-            ) : listings.length === 0 ? null : (
-              listings.map(listing => (
-                <div key={listing.ebayItemId} className={`flex items-center gap-4 px-5 py-4 transition hover:bg-white/[0.02] ${listing.alreadyInInventory ? "opacity-50" : ""}`}>
-                  {/* Thumbnail */}
-                  {listing.imageUrl ? (
-                    <img src={listing.imageUrl} alt={listing.title}
-                      className="h-14 w-14 flex-shrink-0 rounded-xl object-contain border border-white/10 bg-black/20 p-1" />
-                  ) : (
-                    <div className="h-14 w-14 flex-shrink-0 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center">
-                      <Package size={20} className="text-slate-600" />
-                    </div>
-                  )}
-                  {/* Details */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{listing.title}</p>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
-                      <span className="text-emerald-400 font-semibold">£{Number(listing.price).toFixed(2)}</span>
-                      <span>Qty: {listing.quantity}</span>
-                      <span className="font-mono text-slate-600">#{listing.ebayItemId}</span>
-                    </div>
-                  </div>
-                  {/* Action */}
-                  {listing.alreadyInInventory ? (
-                    <span className="flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-400 flex-shrink-0">
-                      <CheckCircle size={11} /> In Inventory
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => addListingToInventory(listing)}
-                      disabled={addingItem === listing.ebayItemId}
-                      className="flex items-center gap-1.5 rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300 hover:bg-blue-500/20 disabled:opacity-50 transition flex-shrink-0">
-                      {addingItem === listing.ebayItemId ? (
-                        <RefreshCw size={11} className="animate-spin" />
-                      ) : (
-                        <Plus size={11} />
-                      )}
-                      {addingItem === listing.ebayItemId ? "Adding..." : "Add to Inventory"}
-                    </button>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-
-      {syncResult && (
+        {syncResult && (
           <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm text-red-300">
             {syncResult}
           </div>
@@ -390,12 +301,7 @@ export default function EbayTab() {
           <button onClick={handleSync} disabled={syncing}
             className="flex items-center gap-2 rounded-2xl border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-300 transition hover:bg-blue-500/20 disabled:opacity-50">
             <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
-            {syncing ? "Syncing..." : "Sync Sales"}
-          </button>
-          <button onClick={fetchListings} disabled={loadingListings}
-            className="flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50">
-            <Package size={14} className={loadingListings ? "animate-spin" : ""} />
-            {loadingListings ? "Loading..." : "Import Listings"}
+            {syncing ? "Syncing..." : "Sync Now"}
           </button>
           <button onClick={handleDisconnect} disabled={disconnecting}
             className="flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-300 transition hover:bg-red-500/20 disabled:opacity-50">
@@ -404,110 +310,59 @@ export default function EbayTab() {
         </div>
       </div>
 
-      {/* Listings import panel */}
-      {showListingsPanel && (
-        <div className="rounded-[20px] border border-emerald-500/15 bg-[#071021] overflow-hidden">
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-            <div>
-              <p className="text-sm font-semibold text-white">Your Active eBay Listings</p>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {listings.filter(l => !l.alreadyInInventory).length} new •{" "}
-                {listings.filter(l => l.alreadyInInventory).length} already in inventory
-              </p>
-            </div>
-            <button onClick={() => { setShowListingsPanel(false); setListingsMsg(null); }}
-              className="text-slate-500 hover:text-white transition text-lg leading-none">✕</button>
-          </div>
-
-          {listingsMsg && (
-            <div className={`mx-5 mt-4 rounded-xl border px-4 py-2.5 text-sm ${
-              listingsMsg.startsWith("✅")
-                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
-                : "border-red-500/20 bg-red-500/10 text-red-300"
-            }`}>
-              {listingsMsg}
-            </div>
-          )}
-
-          <div className="divide-y divide-white/5">
-            {loadingListings ? (
-              <div className="flex items-center justify-center gap-3 px-5 py-10 text-sm text-slate-400">
-                <RefreshCw size={16} className="animate-spin" />
-                Fetching your active eBay listings...
-              </div>
-            ) : listings.length === 0 && !listingsMsg ? (
-              <p className="px-5 py-8 text-center text-sm text-slate-500">No active listings found on your eBay account.</p>
-            ) : listings.length === 0 ? null : (
-              listings.map(listing => (
-                <div key={listing.ebayItemId} className={`flex items-center gap-4 px-5 py-4 transition hover:bg-white/[0.02] ${listing.alreadyInInventory ? "opacity-50" : ""}`}>
-                  {/* Thumbnail */}
-                  {listing.imageUrl ? (
-                    <img src={listing.imageUrl} alt={listing.title}
-                      className="h-14 w-14 flex-shrink-0 rounded-xl object-contain border border-white/10 bg-black/20 p-1" />
-                  ) : (
-                    <div className="h-14 w-14 flex-shrink-0 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center">
-                      <Package size={20} className="text-slate-600" />
-                    </div>
-                  )}
-                  {/* Details */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{listing.title}</p>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
-                      <span className="text-emerald-400 font-semibold">£{Number(listing.price).toFixed(2)}</span>
-                      <span>Qty: {listing.quantity}</span>
-                      <span className="font-mono text-slate-600">#{listing.ebayItemId}</span>
-                    </div>
-                  </div>
-                  {/* Action */}
-                  {listing.alreadyInInventory ? (
-                    <span className="flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-400 flex-shrink-0">
-                      <CheckCircle size={11} /> In Inventory
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => addListingToInventory(listing)}
-                      disabled={addingItem === listing.ebayItemId}
-                      className="flex items-center gap-1.5 rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300 hover:bg-blue-500/20 disabled:opacity-50 transition flex-shrink-0">
-                      {addingItem === listing.ebayItemId ? (
-                        <RefreshCw size={11} className="animate-spin" />
-                      ) : (
-                        <Plus size={11} />
-                      )}
-                      {addingItem === listing.ebayItemId ? "Adding..." : "Add to Inventory"}
-                    </button>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-
       {syncResult && (
-        <div className="flex items-center gap-2 rounded-2xl border border-emerald-500/15 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-          <AlertCircle size={14} />
-          {syncResult}
+        <div className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm ${syncResult.includes("error") || syncResult.includes("failed") ? "border-red-500/20 bg-red-500/10 text-red-300" : "border-emerald-500/15 bg-emerald-500/10 text-emerald-300"}`}>
+          <AlertCircle size={14} />{syncResult}
         </div>
       )}
+
+      {/* eBay stat cards */}
+      {(() => {
+        const totalRev = sales.reduce((s, x) => s + Number(x.sale_price) * Number(x.quantity_sold), 0);
+        const totalOrders = sales.length;
+        const avgSale = totalOrders > 0 ? totalRev / totalOrders : 0;
+        return (
+          <div className="grid grid-cols-3 gap-4">
+            {[
+              { label: "eBay Revenue", value: `£${totalRev.toFixed(2)}`, icon: PoundSterling, color: "border-blue-500/20 bg-blue-500/10 text-blue-300" },
+              { label: "eBay Orders", value: String(totalOrders), icon: ShoppingCart, color: "border-blue-500/20 bg-blue-500/10 text-blue-300" },
+              { label: "Avg Sale Price", value: `£${avgSale.toFixed(2)}`, icon: TrendingUp, color: "border-blue-500/20 bg-blue-500/10 text-blue-300" },
+            ].map(s => {
+              const Icon = s.icon;
+              return (
+                <div key={s.label} className="rounded-[20px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-4">
+                  <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-xl border ${s.color}`}><Icon size={15} /></div>
+                  <p className="text-xl font-semibold text-white">{s.value}</p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-500">{s.label}</p>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      {/* Sub-tab nav */}
+      <div className="flex gap-2 border-b border-white/10 pb-3">
+        <button onClick={() => setActiveSubTab("sales")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition ${activeSubTab === "sales" ? "border border-blue-500/30 bg-blue-500/15 text-blue-300" : "border border-white/10 bg-white/5 text-slate-400 hover:text-white"}`}>
+          <BarChart3 size={13} /> Sales Data
+        </button>
+        <button onClick={() => { setActiveSubTab("feedback"); if (feedbackOrders.length === 0) fetchFeedbackOrders(); }}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition ${activeSubTab === "feedback" ? "border border-blue-500/30 bg-blue-500/15 text-blue-300" : "border border-white/10 bg-white/5 text-slate-400 hover:text-white"}`}>
+          <Star size={13} /> Leave Feedback
+        </button>
+      </div>
+
+      {activeSubTab === "sales" && (<>
 
       {/* Unmatched callout */}
       {unmatchedCount > 0 && (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-          <div className="flex items-center gap-3">
-            <Link2 size={14} className="flex-shrink-0" />
-            <span>
-              <span className="font-semibold">{unmatchedCount} sale{unmatchedCount > 1 ? "s" : ""} not matched to inventory.</span>{" "}
-              Match or delete personal sales you don&apos;t want tracked.
-            </span>
-          </div>
-          <button
-            onClick={handleDeleteAllUnmatched}
-            disabled={deletingAll}
-            className="flex items-center gap-1.5 flex-shrink-0 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
-          >
-            <Trash2 size={11} />
-            {deletingAll ? "Deleting..." : "Delete all unmatched"}
-          </button>
+        <div className="flex items-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          <Link2 size={14} className="flex-shrink-0" />
+          <span>
+            <span className="font-semibold">{unmatchedCount} sale{unmatchedCount > 1 ? "s" : ""} not matched to inventory.</span>{" "}
+            Use the dropdown on each row to manually link them — this will mark the matching inventory item as sold.
+          </span>
         </div>
       )}
 
@@ -574,14 +429,6 @@ export default function EbayTab() {
                             <Link2 size={11} />
                             {matching === sale.id ? "..." : "Match"}
                           </button>
-                          <button
-                            onClick={() => handleDeleteSale(sale.id)}
-                            disabled={deleting === sale.id}
-                            title="Delete this sale"
-                            className="flex items-center gap-1 rounded-xl border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-xs text-red-400 hover:bg-red-500/20 disabled:opacity-40 transition"
-                          >
-                            {deleting === sale.id ? <RefreshCw size={11} className="animate-spin" /> : <Trash2 size={11} />}
-                          </button>
                         </div>
                       )}
                     </td>
@@ -592,6 +439,101 @@ export default function EbayTab() {
           </table>
         </div>
       </div>
+    </>)}
+
+      {/* ── Feedback Tab ── */}
+      {activeSubTab === "feedback" && (
+        <div className="space-y-5">
+          <div className="rounded-[20px] border border-blue-500/15 bg-[#081120] p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-white">Leave Feedback for Buyers</h3>
+                <p className="mt-1 text-xs text-slate-400">Fetch orders awaiting feedback and leave positive reviews for all buyers in one click.</p>
+              </div>
+              <button onClick={fetchFeedbackOrders} disabled={loadingFeedback}
+                className="flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-300 hover:bg-blue-500/20 transition disabled:opacity-50">
+                {loadingFeedback ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                {loadingFeedback ? "Loading..." : "Fetch Pending"}
+              </button>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-xs font-medium text-slate-400">Feedback Message</label>
+              <input value={feedbackMessage} onChange={e => setFeedbackMessage(e.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-blue-400/30 placeholder:text-slate-600" />
+              <p className="mt-1 text-xs text-slate-600">This message will be left for all selected buyers. Keep it positive and generic.</p>
+            </div>
+          </div>
+
+          {feedbackResult && (
+            <div className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm ${feedbackResult.ok ? "border-emerald-500/15 bg-emerald-500/10 text-emerald-300" : "border-red-500/20 bg-red-500/10 text-red-300"}`}>
+              <AlertCircle size={14} />{feedbackResult.msg}
+            </div>
+          )}
+
+          {loadingFeedback ? (
+            <div className="flex items-center justify-center py-10 text-slate-500 text-sm">
+              <Loader2 size={16} className="animate-spin mr-2" /> Fetching pending feedback orders...
+            </div>
+          ) : feedbackOrders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 rounded-[20px] border border-white/10 bg-[#081120]/50 text-center">
+              <Star size={28} className="mb-3 text-slate-600" />
+              <p className="text-sm font-semibold text-white">No pending feedback</p>
+              <p className="mt-1 text-xs text-slate-500">Click "Fetch Pending" to check for orders awaiting feedback.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <p className="text-sm text-white font-medium">{feedbackOrders.length} order{feedbackOrders.length !== 1 ? "s" : ""} awaiting feedback</p>
+                  <button onClick={() => setSelectedFeedback(selectedFeedback.size === feedbackOrders.length ? new Set() : new Set(feedbackOrders.map(o => o.orderId)))}
+                    className="text-xs text-blue-400 hover:text-blue-300 transition">
+                    {selectedFeedback.size === feedbackOrders.length ? "Deselect all" : "Select all"}
+                  </button>
+                </div>
+                <button onClick={handleLeaveFeedback} disabled={leavingFeedback || selectedFeedback.size === 0}
+                  className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 transition disabled:opacity-50">
+                  {leavingFeedback ? <Loader2 size={13} className="animate-spin" /> : <Star size={13} />}
+                  {leavingFeedback ? "Leaving..." : `Leave Feedback (${selectedFeedback.size})`}
+                </button>
+              </div>
+
+              <div className="overflow-hidden rounded-[20px] border border-white/10 bg-[#081120]/80">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-white/10 bg-white/5 text-left text-slate-400">
+                    <tr>
+                      <th className="px-4 py-3 w-8"></th>
+                      <th className="px-4 py-3 font-medium">Item</th>
+                      <th className="px-4 py-3 font-medium">Buyer</th>
+                      <th className="px-4 py-3 font-medium">Sale Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {feedbackOrders.map(order => (
+                      <tr key={order.orderId} className="border-b border-white/5 hover:bg-white/[0.02]">
+                        <td className="px-4 py-3">
+                          <button onClick={() => setSelectedFeedback(prev => {
+                            const n = new Set(prev);
+                            n.has(order.orderId) ? n.delete(order.orderId) : n.add(order.orderId);
+                            return n;
+                          })} className="text-slate-500 hover:text-white transition">
+                            {selectedFeedback.has(order.orderId)
+                              ? <CheckCircle size={15} className="text-blue-400" />
+                              : <div className="h-4 w-4 rounded border border-white/20" />}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 text-white max-w-[300px] truncate" title={order.itemTitle}>{order.itemTitle}</td>
+                        <td className="px-4 py-3 text-slate-300">@{order.buyerUsername}</td>
+                        <td className="px-4 py-3 text-slate-400 text-xs">{new Date(order.saleDate).toLocaleDateString("en-GB")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
