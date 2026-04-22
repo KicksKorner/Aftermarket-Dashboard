@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { accessToken } = await req.json();
+  const { accessToken, refreshToken } = await req.json();
   if (!accessToken?.trim()) {
     return NextResponse.json({ error: "Access token is required" }, { status: 400 });
   }
@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
     user_id: user.id,
     access_token: accessToken.trim(),
     vinted_user_id: vintedUserId,
+    ...(refreshToken ? { refresh_token: refreshToken.trim() } : {}),
   }, { onConflict: "user_id" });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

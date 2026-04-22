@@ -15,25 +15,67 @@ export async function POST() {
 
   if (!conn) return NextResponse.json({ error: "No Vinted account connected" }, { status: 400 });
 
-  const token = conn.access_token;
+  let token = conn.access_token;
   let vintedUserId = conn.vinted_user_id;
 
-  const headers = {
-    "Authorization": `Bearer ${token}`,
-    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-GB,en;q=0.9",
-    "Content-Type": "application/json",
-    "X-Anon-Id": "",
-    "Pragma": "no-cache",
-  };
+  function makeHeaders(t: string) {
+    return {
+      "Authorization": `Bearer ${t}`,
+      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+      "Accept": "application/json, text/plain, */*",
+      "Accept-Language": "en-GB,en;q=0.9",
+      "Content-Type": "application/json",
+      "X-Anon-Id": "",
+      "Pragma": "no-cache",
+    };
+  }
 
-  // Get user ID if we don't have it
+  // Try to refresh token using Vinted's OAuth endpoint if we have a refresh token
+  async function tryRefreshToken(): Promise<string | null> {
+    if (!conn.refresh_token) return null;
+    try {
+      const res = await fetch("https://www.vinted.co.uk/oauth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: conn.refresh_token,
+          client_id: "android",
+        }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      const newToken = data.access_token;
+      if (newToken) {
+        await supabase.from("vinted_connections").update({
+          access_token: newToken,
+          ...(data.refresh_token ? { refresh_token: data.refresh_token } : {}),
+        }).eq("user_id", user.id);
+        return newToken;
+      }
+    } catch { return null; }
+    return null;
+  }
+
+  let headers = makeHeaders(token);
+
+  // Get user ID — also validates token
   if (!vintedUserId) {
-    const meRes = await fetch("https://www.vinted.co.uk/api/v2/users/current", { headers });
+    let meRes = await fetch("https://www.vinted.co.uk/api/v2/users/current", { headers });
+
+    // Token expired — try refresh
+    if (!meRes.ok && (meRes.status === 401 || meRes.status === 403)) {
+      const refreshed = await tryRefreshToken();
+      if (refreshed) {
+        token = refreshed;
+        headers = makeHeaders(token);
+        meRes = await fetch("https://www.vinted.co.uk/api/v2/users/current", { headers });
+      }
+    }
+
     if (!meRes.ok) {
       return NextResponse.json({
-        error: "Token invalid or expired. Please reconnect your Vinted account.",
+        error: "Token expired. Please reconnect your Vinted account with a fresh token.",
       }, { status: 401 });
     }
     const meData = await meRes.json();
@@ -48,18 +90,47 @@ export async function POST() {
   }
 
   // Fetch sold transactions
-  const txRes = await fetch(
-    `https://www.vinted.co.uk/api/v2/users/${vintedUserId}/sold_items?page=1&per_page=100`,
-    { headers }
-  );
+  // Try fetching sold items using the correct Vinted endpoint
+  // Try multiple endpoints as Vinted changes these periodically
+  const endpoints = [
+    `https://www.vinted.co.uk/api/v2/my/sold_items?page=1&per_page=100`,
+    `https://www.vinted.co.uk/api/v2/users/${vintedUserId}/items?status=sold&page=1&per_page=100`,
+    `https://www.vinted.co.uk/api/v2/items?user_id=${vintedUserId}&status[]=sold&page=1&per_page=100`,
+  ];
 
-  if (!txRes.ok) {
-    const errText = await txRes.text();
-    console.error("Vinted sold items fetch failed:", errText);
+  let txRes: Response | null = null;
+  let workingEndpoint = "";
+
+  for (const endpoint of endpoints) {
+    const res = await fetch(endpoint, { headers });
+    console.log(`Vinted endpoint ${endpoint} → ${res.status}`);
+    if (res.ok) {
+      txRes = res;
+      workingEndpoint = endpoint;
+      break;
+    }
+    // If 401, try refresh once then retry all endpoints
+    if ((res.status === 401 || res.status === 403) && conn.refresh_token) {
+      const refreshed = await tryRefreshToken();
+      if (refreshed) {
+        headers = makeHeaders(refreshed);
+        const retryRes = await fetch(endpoint, { headers });
+        if (retryRes.ok) {
+          txRes = retryRes;
+          workingEndpoint = endpoint;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!txRes) {
+    console.error("All Vinted endpoints failed for user", vintedUserId);
     return NextResponse.json({
-      error: "Failed to fetch Vinted sales. Your token may have expired — please reconnect.",
+      error: "Could not fetch Vinted sales. Please disconnect, get a fresh token from your browser cookies and reconnect.",
     }, { status: 400 });
   }
+  console.log("Vinted working endpoint:", workingEndpoint);
 
   const txData = await txRes.json();
   const items = txData.items || txData.sold_items || [];

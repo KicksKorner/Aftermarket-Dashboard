@@ -46,7 +46,9 @@ export default function VintedTab() {
   // Connect form
   const [showConnectForm, setShowConnectForm] = useState(false);
   const [accessToken, setAccessToken] = useState("");
+  const [refreshToken, setRefreshToken] = useState("");
   const [showToken, setShowToken] = useState(false);
+  const [showRefreshToken, setShowRefreshToken] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState("");
 
@@ -100,13 +102,14 @@ export default function VintedTab() {
       const res = await fetch("/api/vinted/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessToken: accessToken.trim() }),
+        body: JSON.stringify({ accessToken: accessToken.trim(), refreshToken: refreshToken.trim() }),
       });
       const data = await res.json();
       if (!res.ok) { setConnectError(data.error || "Failed to connect."); return; }
       setConnectedUsername(data.username || "");
       setShowConnectForm(false);
       setAccessToken("");
+      setRefreshToken("");
       checkConnection();
     } catch { setConnectError("Something went wrong. Please try again."); }
     finally { setConnecting(false); }
@@ -268,7 +271,8 @@ export default function VintedTab() {
               <p>1. Open <span className="text-violet-400">vinted.co.uk</span> in your browser and sign in</p>
               <p>2. Right-click → <strong className="text-white">Inspect</strong> → go to the <strong className="text-white">Application</strong> tab</p>
               <p>3. Expand <strong className="text-white">Cookies</strong> → click the Vinted domain</p>
-              <p>4. Find <strong className="text-white">access_token</strong> and copy the value</p>
+              <p>4. Find <strong className="text-white">access_token</strong> — copy and paste below</p>
+              <p>5. Also copy <strong className="text-white">refresh_token</strong> for auto-renewal (recommended)</p>
               <p className="mt-2 text-slate-600">Full guide in AutoBuy Setup → Getting your Vinted token</p>
             </div>
 
@@ -288,6 +292,26 @@ export default function VintedTab() {
                 </button>
               </div>
               <p className="mt-1.5 text-xs text-slate-600">Your token is stored securely and only visible to you.</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                Refresh Token <span className="text-slate-600">(optional but recommended — prevents expiry)</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showRefreshToken ? "text" : "password"}
+                  value={refreshToken}
+                  onChange={e => setRefreshToken(e.target.value)}
+                  placeholder="Paste your Vinted refresh_token here (optional)"
+                  className={`${inputCls} pr-10`}
+                />
+                <button onClick={() => setShowRefreshToken(!showRefreshToken)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400">
+                  {showRefreshToken ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+              <p className="mt-1.5 text-xs text-slate-600">Find <strong className="text-slate-400">refresh_token</strong> in the same Cookies panel. This allows auto-renewal so you rarely need to reconnect.</p>
             </div>
 
             {connectError && (
