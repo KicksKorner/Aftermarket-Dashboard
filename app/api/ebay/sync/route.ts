@@ -1,30 +1,34 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
-async function refreshEbayToken(refreshToken: string) {
-  const clientId = process.env.EBAY_CLIENT_ID!;
-  const clientSecret = process.env.EBAY_CLIENT_SECRET!;
-  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+async function getValidToken(supabase: any, userId: string) {
+  const { data: conn } = await supabase
+    .from("ebay_connections")
+    .select("access_token, refresh_token, token_expires_at")
+    .eq("user_id", userId)
+    .single();
 
-  const res = await fetch("https://api.ebay.com/identity/v1/oauth2/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${credentials}`,
-    },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      scope: [
-        "https://api.ebay.com/oauth/api_scope",
-        "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
-        "https://api.ebay.com/oauth/api_scope/sell.finances",
-      ].join(" "),
-    }),
-  });
+  if (!conn) return null;
 
-  if (!res.ok) return null;
-  return res.json();
+  const expiresAt = new Date(conn.token_expires_at);
+  if (expiresAt <= new Date(Date.now() + 60000)) {
+    const credentials = Buffer.from(`${process.env.EBAY_CLIENT_ID}:${process.env.EBAY_CLIENT_SECRET}`).toString("base64");
+    const res = await fetch("https://api.ebay.com/identity/v1/oauth2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Basic ${credentials}` },
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: conn.refresh_token }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const newExpiry = new Date(Date.now() + data.expires_in * 1000).toISOString();
+      await supabase.from("ebay_connections").update({
+        access_token: data.access_token,
+        token_expires_at: newExpiry,
+      }).eq("user_id", userId);
+      return data.access_token;
+    }
+  }
+  return conn.access_token;
 }
 
 export async function POST() {
@@ -32,42 +36,35 @@ export async function POST() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: conn } = await supabase
-    .from("ebay_connections")
-    .select("*")
-    .eq("user_id", user.id)
-    .single();
+  const token = await getValidToken(supabase, user.id);
+  if (!token) return NextResponse.json({ error: "No eBay account connected" }, { status: 400 });
 
-  if (!conn) return NextResponse.json({ error: "No eBay account connected" }, { status: 400 });
+  // Fetch ALL orders from last 90 days — no fulfillment status filter
+  // This catches: paid, shipped, and delivered orders
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
 
-  let accessToken = conn.access_token;
-
-  if (new Date(conn.token_expires_at) <= new Date()) {
-    const refreshed = await refreshEbayToken(conn.refresh_token);
-    if (!refreshed) return NextResponse.json({ error: "Token refresh failed" }, { status: 401 });
-
-    accessToken = refreshed.access_token;
-    const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
-    await supabase.from("ebay_connections").update({
-      access_token: accessToken,
-      token_expires_at: newExpiry,
-    }).eq("user_id", user.id);
-  }
-
-  const dateFrom = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-  const ordersRes = await fetch(
-    `https://api.ebay.com/sell/fulfillment/v1/order?filter=lastmodifieddate:[${dateFrom}..],orderfulfillmentstatus:{FULFILLED|IN_PROGRESS}`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
+  const res = await fetch(
+    `https://api.ebay.com/sell/fulfillment/v1/order?filter=lastmodifieddate:[${since}..]&limit=200`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "X-EBAY-C-MARKETPLACE-ID": "EBAY_GB",
+      },
+    }
   );
 
-  if (!ordersRes.ok) {
-    console.error("eBay orders fetch failed:", await ordersRes.text());
-    return NextResponse.json({ error: "Failed to fetch eBay orders" }, { status: 500 });
+  if (!res.ok) {
+    const err = await res.text();
+    console.error("eBay sync error:", res.status, err);
+    return NextResponse.json({ error: "Failed to fetch eBay orders", status: res.status }, { status: 500 });
   }
 
-  const ordersData = await ordersRes.json();
-  const orders = ordersData.orders || [];
+  const data = await res.json();
+  const orders = data.orders || [];
+  console.log(`eBay sync: ${orders.length} orders fetched`);
 
+  // Get existing inventory for auto-matching
   const { data: inventoryItems } = await supabase
     .from("inventory_items")
     .select("id, item_name, quantity_remaining")
@@ -77,59 +74,66 @@ export async function POST() {
   let matched = 0;
 
   for (const order of orders) {
-    for (const lineItem of order.lineItems || []) {
-      const orderId = `${order.orderId}-${lineItem.lineItemId}`;
-      const title: string = lineItem.title || "eBay Item";
-      const qty: number = lineItem.quantity || 1;
-      const price: number = parseFloat(lineItem.lineItemCost?.value || "0");
-      const soldDate: string = order.creationDate || new Date().toISOString();
+    const orderId = order.orderId;
+    const lineItems = order.lineItems || [];
 
+    for (const lineItem of lineItems) {
+      const title: string = lineItem.title || "eBay Item";
+      const quantity = lineItem.quantity || 1;
+      const salePrice = parseFloat(lineItem.lineItemCost?.value || "0");
+      const soldDate = order.creationDate?.split("T")[0] || new Date().toISOString().split("T")[0];
+      const legacyItemId = lineItem.legacyItemId || "";
+      const ebayOrderId = `${orderId}-${lineItem.lineItemId || legacyItemId}`;
+
+      if (!ebayOrderId) continue;
+
+      // Skip already synced
       const { data: existing } = await supabase
         .from("ebay_sales")
         .select("id")
         .eq("user_id", user.id)
-        .eq("ebay_order_id", orderId)
+        .eq("ebay_order_id", ebayOrderId)
         .single();
 
       if (existing) continue;
 
-      let matchedItemId: string | null = null;
+      // Auto-match inventory
+      let matchedInventoryId: string | null = null;
       let autoMatched = false;
 
       if (inventoryItems) {
         const titleLower = title.toLowerCase();
-        const match = inventoryItems.find((item) => {
-          const name = (item.item_name || "").toLowerCase();
+        const match = inventoryItems.find((inv: any) => {
+          const name = (inv.item_name || "").toLowerCase();
           return (
             titleLower.includes(name) ||
             name.includes(titleLower) ||
-            name.split(" ").filter((w: string) => w.length > 3).every((w: string) => titleLower.includes(w))
+            name.split(" ").filter((w: string) => w.length > 4)
+              .every((w: string) => titleLower.includes(w))
           );
         });
 
         if (match && Number(match.quantity_remaining) > 0) {
-          matchedItemId = match.id;
+          matchedInventoryId = match.id;
           autoMatched = true;
-
-          const newRemaining = Math.max(0, Number(match.quantity_remaining) - qty);
-          const nowStr = new Date(soldDate).toISOString().split("T")[0];
+          const newRemaining = Math.max(0, Number(match.quantity_remaining) - quantity);
 
           await supabase.from("inventory_sales").insert({
             user_id: user.id,
             inventory_item_id: match.id,
             item_name: match.item_name,
-            quantity_sold: qty,
-            sold_price: price,
+            quantity_sold: quantity,
+            sold_price: salePrice,
             fees: 0,
             shipping: 0,
-            sold_date: nowStr,
+            sold_date: soldDate,
           });
 
           await supabase.from("inventory_items").update({
             quantity_remaining: newRemaining,
             status: newRemaining === 0 ? "sold" : "in_stock",
-            sold_price: price,
-            sold_date: nowStr,
+            sold_price: salePrice,
+            sold_date: soldDate,
           }).eq("id", match.id);
 
           matched++;
@@ -138,18 +142,22 @@ export async function POST() {
 
       await supabase.from("ebay_sales").insert({
         user_id: user.id,
-        ebay_order_id: orderId,
+        ebay_order_id: ebayOrderId,
         item_title: title,
-        quantity_sold: qty,
-        sale_price: price,
+        quantity_sold: quantity,
+        sale_price: salePrice,
         sold_date: soldDate,
-        matched_inventory_id: matchedItemId,
         auto_matched: autoMatched,
+        matched_inventory_id: matchedInventoryId,
       });
 
       synced++;
     }
   }
 
-  return NextResponse.json({ synced, matched, message: `${synced} orders synced, ${matched} matched to inventory` });
+  return NextResponse.json({
+    synced,
+    matched,
+    message: `Synced ${synced} order${synced !== 1 ? "s" : ""}. ${matched} matched to inventory.`,
+  });
 }

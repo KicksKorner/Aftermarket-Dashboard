@@ -8,14 +8,16 @@ export async function GET() {
 
   const { data: conn } = await supabase
     .from("ebay_connections")
-    .select("access_token, refresh_token, token_expires_at")
+    .select("access_token, refresh_token, token_expires_at, ebay_username")
     .eq("user_id", user.id)
     .single();
 
   if (!conn?.access_token) return NextResponse.json({ error: "No eBay connection" }, { status: 404 });
 
-  // Refresh token if needed
   let token = conn.access_token;
+  let username = conn.ebay_username;
+
+  // Refresh token if near expiry
   const expiresAt = new Date(conn.token_expires_at);
   if (expiresAt <= new Date(Date.now() + 60000)) {
     const credentials = Buffer.from(`${process.env.EBAY_CLIENT_ID}:${process.env.EBAY_CLIENT_SECRET}`).toString("base64");
@@ -34,26 +36,43 @@ export async function GET() {
     }
   }
 
-  // Use commerce.feedback API for score
-  const res = await fetch(
-    "https://api.ebay.com/commerce/feedback/v1/feedback_summary?user_type=SELLER",
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "X-EBAY-C-MARKETPLACE-ID": "EBAY_GB",
-      },
-    }
-  );
-
-  if (!res.ok) {
-    console.error("eBay feedback summary error:", res.status, await res.text());
-    return NextResponse.json({ error: "eBay API error" }, { status: 500 });
+  // If we don't have username yet, fetch it via identity API
+  if (!username) {
+    try {
+      const idRes = await fetch("https://apiz.ebay.com/commerce/identity/v1/user/", {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      });
+      if (idRes.ok) {
+        const idData = await idRes.json();
+        username = idData.username || "";
+        if (username) {
+          await supabase.from("ebay_connections").update({ ebay_username: username }).eq("user_id", user.id);
+        }
+      }
+    } catch {}
   }
 
-  const data = await res.json();
-  const score = data.feedbackScore ?? data.feedback_score ?? 0;
-  const percentage = data.positiveFeedbackPercent ?? data.positive_feedback_percent ?? 0;
+  if (!username) return NextResponse.json({ error: "Could not get eBay username" }, { status: 404 });
 
-  return NextResponse.json({ score, percentage });
+  // Shopping API - public, no user token needed, just App ID
+  const appId = process.env.EBAY_CLIENT_ID!;
+  const shopRes = await fetch(
+    `https://open.api.ebay.com/shopping?callname=GetUserProfile&version=967&siteid=3&appid=${appId}&UserID=${encodeURIComponent(username)}&IncludeSelector=FeedbackHistory&responseencoding=JSON`
+  );
+
+  if (!shopRes.ok) {
+    console.error("eBay Shopping API error:", shopRes.status);
+    return NextResponse.json({ error: "eBay Shopping API error" }, { status: 500 });
+  }
+
+  const shopData = await shopRes.json();
+  const userInfo = shopData.User;
+
+  if (!userInfo) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+  return NextResponse.json({
+    score: userInfo.FeedbackScore ?? 0,
+    percentage: userInfo.PositiveFeedbackPercent ?? 0,
+    username,
+  });
 }
