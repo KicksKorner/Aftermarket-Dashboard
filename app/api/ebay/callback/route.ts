@@ -20,12 +20,10 @@ export async function GET(req: NextRequest) {
 
   const clientId = process.env.EBAY_CLIENT_ID!;
   const clientSecret = process.env.EBAY_CLIENT_SECRET!;
-
-  // Must use RuName as redirect_uri in the token exchange — same as the authorize step.
   const ruName = process.env.EBAY_RUNAME!;
-
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 
+  // Exchange code for tokens
   const tokenRes = await fetch("https://api.ebay.com/identity/v1/oauth2/token", {
     method: "POST",
     headers: {
@@ -48,6 +46,21 @@ export async function GET(req: NextRequest) {
   const tokenData = await tokenRes.json();
   const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
 
+  // Fetch eBay username
+  let ebayUsername = "";
+  try {
+    const userRes = await fetch("https://apiz.ebay.com/commerce/identity/v1/user/", {
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+        "Content-Type": "application/json",
+      },
+    });
+    if (userRes.ok) {
+      const userData = await userRes.json();
+      ebayUsername = userData.username || "";
+    }
+  } catch {}
+
   const supabase = await createClient();
   const { error } = await supabase.from("ebay_connections").upsert(
     {
@@ -55,6 +68,7 @@ export async function GET(req: NextRequest) {
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
       token_expires_at: expiresAt,
+      ebay_username: ebayUsername,
     },
     { onConflict: "user_id" }
   );

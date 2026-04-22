@@ -7,13 +7,13 @@ export async function GET() {
   if (!user) return NextResponse.redirect(new URL("/login", process.env.NEXT_PUBLIC_SITE_URL!));
 
   const clientId = process.env.EBAY_CLIENT_ID!;
-  const ruName = process.env.EBAY_RUNAME!;
-
+  const redirectUri = encodeURIComponent(`${process.env.NEXT_PUBLIC_SITE_URL}/api/ebay/callback`);
   const scopes = encodeURIComponent([
     "https://api.ebay.com/oauth/api_scope",
     "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
     "https://api.ebay.com/oauth/api_scope/sell.finances",
-    "https://api.ebay.com/oauth/api_scope/sell.inventory.readonly",
+    "https://api.ebay.com/oauth/api_scope/sell.feedback",
+    "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
   ].join(" "));
 
   const state = Buffer.from(user.id).toString("base64");
@@ -22,7 +22,7 @@ export async function GET() {
     `https://auth.ebay.com/oauth2/authorize` +
     `?client_id=${clientId}` +
     `&response_type=code` +
-    `&redirect_uri=${encodeURIComponent(ruName)}` +
+    `&redirect_uri=${redirectUri}` +
     `&scope=${scopes}` +
     `&state=${state}`;
 
