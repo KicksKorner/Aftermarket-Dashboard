@@ -81,6 +81,16 @@ export default async function AdminOverviewPage() {
     Compose and send weekly investment breakdowns to Discord.
   </p>
 </Link>
+
+          <Link
+            href="/admin/activity"
+            className="rounded-[24px] border border-amber-500/20 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-amber-400/30"
+          >
+            <h2 className="text-xl font-semibold">🏆 Member Activity</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Leaderboard showing member engagement, sales logged, revenue and platform usage.
+            </p>
+          </Link>
         </div>
       </div>
     </main>
