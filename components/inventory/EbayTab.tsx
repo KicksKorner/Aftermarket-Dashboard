@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { ShoppingCart, RefreshCw, Unlink, CheckCircle, AlertCircle, Package, Link2, Plus } from "lucide-react";
+import { ShoppingCart, RefreshCw, Unlink, CheckCircle, AlertCircle, Package, Link2, Plus, Trash2 } from "lucide-react";
 
 const supabase = createClient();
 
@@ -43,6 +43,8 @@ export default function EbayTab() {
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
   const [matching, setMatching] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deletingAll, setDeletingAll] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<Record<string, string>>({});
   const [showListingsPanel, setShowListingsPanel] = useState(false);
   const [listings, setListings] = useState<EbayListing[]>([]);
@@ -74,20 +76,45 @@ export default function EbayTab() {
     setInventoryItems((data || []) as InventoryItem[]);
   }, []);
 
+  async function handleDeleteSale(saleId: string) {
+    setDeleting(saleId);
+    await supabase.from("ebay_sales").delete().eq("id", saleId);
+    setDeleting(null);
+    fetchSales();
+  }
+
+  async function handleDeleteAllUnmatched() {
+    if (!window.confirm("Delete all unmatched sales? This cannot be undone.")) return;
+    setDeletingAll(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setDeletingAll(false); return; }
+    await supabase.from("ebay_sales")
+      .delete()
+      .eq("user_id", user.id)
+      .is("matched_inventory_id", null);
+    setDeletingAll(false);
+    fetchSales();
+    setSyncResult("All unmatched sales deleted.");
+  }
+
   async function fetchListings() {
     setLoadingListings(true);
     setListingsMsg(null);
+    setListings([]);
+    setShowListingsPanel(true); // Always open the panel so errors are visible
     try {
       const res = await fetch("/api/ebay/sync-listings");
       const data = await res.json();
       if (res.ok) {
         setListings(data.listings || []);
-        setShowListingsPanel(true);
+        if ((data.listings || []).length === 0) {
+          setListingsMsg("No active listings found on your eBay account.");
+        }
       } else {
         setListingsMsg(data.error || "Failed to fetch listings.");
       }
-    } catch {
-      setListingsMsg("Failed to fetch listings. Please try again.");
+    } catch (err: any) {
+      setListingsMsg(`Error: ${err?.message || "Failed to fetch listings. Please try again."}`);
     } finally {
       setLoadingListings(false);
     }
@@ -274,15 +301,24 @@ export default function EbayTab() {
           </div>
 
           {listingsMsg && (
-            <div className="mx-5 mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2.5 text-sm text-emerald-300">
+            <div className={`mx-5 mt-4 rounded-xl border px-4 py-2.5 text-sm ${
+              listingsMsg.startsWith("✅")
+                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                : "border-red-500/20 bg-red-500/10 text-red-300"
+            }`}>
               {listingsMsg}
             </div>
           )}
 
           <div className="divide-y divide-white/5">
-            {listings.length === 0 ? (
+            {loadingListings ? (
+              <div className="flex items-center justify-center gap-3 px-5 py-10 text-sm text-slate-400">
+                <RefreshCw size={16} className="animate-spin" />
+                Fetching your active eBay listings...
+              </div>
+            ) : listings.length === 0 && !listingsMsg ? (
               <p className="px-5 py-8 text-center text-sm text-slate-500">No active listings found on your eBay account.</p>
-            ) : (
+            ) : listings.length === 0 ? null : (
               listings.map(listing => (
                 <div key={listing.ebayItemId} className={`flex items-center gap-4 px-5 py-4 transition hover:bg-white/[0.02] ${listing.alreadyInInventory ? "opacity-50" : ""}`}>
                   {/* Thumbnail */}
@@ -384,15 +420,24 @@ export default function EbayTab() {
           </div>
 
           {listingsMsg && (
-            <div className="mx-5 mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2.5 text-sm text-emerald-300">
+            <div className={`mx-5 mt-4 rounded-xl border px-4 py-2.5 text-sm ${
+              listingsMsg.startsWith("✅")
+                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                : "border-red-500/20 bg-red-500/10 text-red-300"
+            }`}>
               {listingsMsg}
             </div>
           )}
 
           <div className="divide-y divide-white/5">
-            {listings.length === 0 ? (
+            {loadingListings ? (
+              <div className="flex items-center justify-center gap-3 px-5 py-10 text-sm text-slate-400">
+                <RefreshCw size={16} className="animate-spin" />
+                Fetching your active eBay listings...
+              </div>
+            ) : listings.length === 0 && !listingsMsg ? (
               <p className="px-5 py-8 text-center text-sm text-slate-500">No active listings found on your eBay account.</p>
-            ) : (
+            ) : listings.length === 0 ? null : (
               listings.map(listing => (
                 <div key={listing.ebayItemId} className={`flex items-center gap-4 px-5 py-4 transition hover:bg-white/[0.02] ${listing.alreadyInInventory ? "opacity-50" : ""}`}>
                   {/* Thumbnail */}
@@ -447,12 +492,22 @@ export default function EbayTab() {
 
       {/* Unmatched callout */}
       {unmatchedCount > 0 && (
-        <div className="flex items-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-          <Link2 size={14} className="flex-shrink-0" />
-          <span>
-            <span className="font-semibold">{unmatchedCount} sale{unmatchedCount > 1 ? "s" : ""} not matched to inventory.</span>{" "}
-            Use the dropdown on each row to manually link them — this will mark the matching inventory item as sold.
-          </span>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          <div className="flex items-center gap-3">
+            <Link2 size={14} className="flex-shrink-0" />
+            <span>
+              <span className="font-semibold">{unmatchedCount} sale{unmatchedCount > 1 ? "s" : ""} not matched to inventory.</span>{" "}
+              Match or delete personal sales you don&apos;t want tracked.
+            </span>
+          </div>
+          <button
+            onClick={handleDeleteAllUnmatched}
+            disabled={deletingAll}
+            className="flex items-center gap-1.5 flex-shrink-0 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
+          >
+            <Trash2 size={11} />
+            {deletingAll ? "Deleting..." : "Delete all unmatched"}
+          </button>
         </div>
       )}
 
@@ -518,6 +573,14 @@ export default function EbayTab() {
                           >
                             <Link2 size={11} />
                             {matching === sale.id ? "..." : "Match"}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSale(sale.id)}
+                            disabled={deleting === sale.id}
+                            title="Delete this sale"
+                            className="flex items-center gap-1 rounded-xl border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-xs text-red-400 hover:bg-red-500/20 disabled:opacity-40 transition"
+                          >
+                            {deleting === sale.id ? <RefreshCw size={11} className="animate-spin" /> : <Trash2 size={11} />}
                           </button>
                         </div>
                       )}
