@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   Package, CheckSquare, Coins, PoundSterling, TrendingUp, Lock,
-  LayoutDashboard, ShoppingCart, Tag, Receipt, Boxes, FileSpreadsheet, Star, RefreshCw, Loader2,
+  LayoutDashboard, ShoppingCart, Tag, Receipt, Boxes, FileSpreadsheet, Square, CheckSquare2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import AddItemModal from "@/components/inventory/AddItemModal";
@@ -26,7 +26,7 @@ import {
 const supabase = createClient();
 type FilterType = "all" | "in_stock" | "sold";
 type SaleWithBuyPrice = InventorySale & { buy_price_per_unit: number };
-type TabType = "overview" | "inventory" | "replenishables" | "ebay" | "amazon" | "vinted" | "receipts";
+type TabType = "overview" | "inventory" | "ebay" | "amazon" | "vinted" | "receipts";
 
 export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -45,8 +45,12 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
   const [notesSaved, setNotesSaved] = useState(false);
   const [notesLoading, setNotesLoading] = useState(true);
   const [showSalesCard, setShowSalesCard] = useState(false);
-  const [togglingReplen, setTogglingReplen] = useState<string | null>(null);
-  const [reorderNotes, setReorderNotes] = useState<Record<string, string>>({});
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [showBulkSellModal, setShowBulkSellModal] = useState(false);
+  const [bulkSellPrice, setBulkSellPrice] = useState("");
+  const [bulkSellDate, setBulkSellDate] = useState(new Date().toISOString().split("T")[0]);
+  const [bulkSellFees, setBulkSellFees] = useState("0");
+  const [bulkSelling, setBulkSelling] = useState(false);
   const [salesCardItem, setSalesCardItem] = useState<{
     id: string;
     item_name: string;
@@ -172,19 +176,61 @@ const statCards = [
     if (!error) fetchData();
   }
 
-  async function toggleReplenishable(item: InventoryItem) {
-    setTogglingReplen(item.id);
-    await supabase.from("inventory_items").update({
-      is_replenishable: !(item as any).is_replenishable,
-    }).eq("id", item.id);
-    await fetchData();
-    setTogglingReplen(null);
+  function toggleSelectItem(id: string) {
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   }
 
-  async function saveReorderNote(itemId: string) {
-    await supabase.from("inventory_items").update({
-      reorder_note: reorderNotes[itemId] || null,
-    }).eq("id", itemId);
+  function toggleSelectAll() {
+    const inStockIds = filteredItems.filter(i => Number(i.quantity_remaining) > 0).map(i => i.id);
+    if (selectedItems.size === inStockIds.length) {
+      setSelectedItems(new Set());
+    } else {
+      setSelectedItems(new Set(inStockIds));
+    }
+  }
+
+  async function handleBulkSell() {
+    if (!bulkSellPrice || selectedItems.size === 0) return;
+    setBulkSelling(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setBulkSelling(false); return; }
+
+    const price = parseFloat(bulkSellPrice);
+    const fees = parseFloat(bulkSellFees) || 0;
+    const itemsToSell = filteredItems.filter(i => selectedItems.has(i.id) && Number(i.quantity_remaining) > 0);
+
+    for (const item of itemsToSell) {
+      const qty = Number(item.quantity_remaining);
+      await supabase.from("inventory_sales").insert({
+        user_id: user.id,
+        inventory_item_id: item.id,
+        item_name: item.item_name,
+        quantity_sold: qty,
+        sold_price: price,
+        fees: fees,
+        shipping: 0,
+        sold_date: bulkSellDate,
+      });
+      await supabase.from("inventory_items").update({
+        quantity_sold: Number(item.quantity_sold || 0) + qty,
+        quantity_remaining: 0,
+        status: "sold",
+        sold_price: price,
+        fees: fees,
+        sold_date: bulkSellDate,
+      }).eq("id", item.id);
+    }
+
+    setBulkSelling(false);
+    setShowBulkSellModal(false);
+    setSelectedItems(new Set());
+    setBulkSellPrice("");
+    setBulkSellFees("0");
+    fetchData();
   }
 
   function handleDownloadTemplate() {
@@ -215,7 +261,6 @@ const statCards = [
   const tabs = [
     { id: "overview" as TabType, label: "Overview", icon: LayoutDashboard, premiumOnly: false },
     { id: "inventory" as TabType, label: "Inventory", icon: Boxes, premiumOnly: false },
-    { id: "replenishables" as TabType, label: "Replenishables", icon: Star, premiumOnly: false },
     { id: "ebay" as TabType, label: "eBay", icon: ShoppingCart, premiumOnly: true },
     { id: "amazon" as TabType, label: "Amazon", icon: Package, premiumOnly: true },
     { id: "vinted" as TabType, label: "Vinted", icon: Tag, premiumOnly: true },
@@ -361,6 +406,13 @@ const statCards = [
                     </>
                   )}
                   <button onClick={() => setShowAddModal(true)} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-black hover:opacity-90">Add Item</button>
+                  {selectedItems.size > 0 && (
+                    <button onClick={() => setShowBulkSellModal(true)}
+                      className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/25 transition">
+                      <CheckSquare2 size={14} />
+                      Bulk Sell {selectedItems.size} item{selectedItems.size !== 1 ? "s" : ""}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -388,6 +440,13 @@ const statCards = [
                   <table className="w-full min-w-[1500px] text-sm">
                     <thead className="border-b border-white/10 bg-white/5 text-left text-slate-400">
                       <tr>
+                        <th className="px-4 py-4 w-10">
+                          <button onClick={toggleSelectAll} className="text-slate-500 hover:text-white transition">
+                            {selectedItems.size > 0 && selectedItems.size === filteredItems.filter(i => Number(i.quantity_remaining) > 0).length
+                              ? <CheckSquare2 size={16} className="text-emerald-400" />
+                              : <Square size={16} />}
+                          </button>
+                        </th>
                         <th className="px-4 py-4 font-medium">Item</th>
                         <th className="px-4 py-4 font-medium">Buy</th>
                         <th className="px-4 py-4 font-medium">Qty</th>
@@ -427,7 +486,16 @@ const statCards = [
                         const isSoldOut = Number(item.quantity_remaining) === 0;
                         const countdown = getReturnCountdown(item.return_deadline);
                         return (
-                          <tr key={item.id} className="border-b border-white/5 hover:bg-white/[0.03]">
+                          <tr key={item.id} className={`border-b border-white/5 hover:bg-white/[0.03] ${selectedItems.has(item.id) ? "bg-emerald-500/5" : ""}`}>
+                            <td className="px-4 py-4">
+                              {Number(item.quantity_remaining) > 0 && (
+                                <button onClick={() => toggleSelectItem(item.id)} className="text-slate-500 hover:text-white transition">
+                                  {selectedItems.has(item.id)
+                                    ? <CheckSquare2 size={16} className="text-emerald-400" />
+                                    : <Square size={16} />}
+                                </button>
+                              )}
+                            </td>
                             <td className="px-4 py-4 font-medium text-white">{item.item_name}</td>
                             <td className="px-4 py-4 text-slate-300">£{Number(item.buy_price).toFixed(2)}</td>
                             <td className="px-4 py-4 text-slate-300">{Number(item.quantity ?? 1)}</td>
@@ -471,14 +539,6 @@ const statCards = [
                             <td className="px-4 py-4 text-slate-300">{item.sold_date ?? "-"}</td>
                             <td className="px-4 py-4">
                               <div className="flex flex-wrap gap-2">
-                                <button
-                                  onClick={() => toggleReplenishable(item)}
-                                  disabled={togglingReplen === item.id}
-                                  title={(item as any).is_replenishable ? "Remove from replenishables" : "Add to replenishables"}
-                                  className={`rounded-xl border px-3 py-2 text-xs transition ${(item as any).is_replenishable ? "border-amber-500/20 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" : "border-white/10 bg-white/5 text-slate-500 hover:text-amber-400"}`}
-                                >
-                                  {togglingReplen === item.id ? "..." : "⭐"}
-                                </button>
                                 <button onClick={() => handleOpenEditModal(item)} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:bg-white/10">Edit</button>
                                 {Number(item.quantity_remaining) > 0 && (
                                   <button onClick={() => handleOpenSoldModal(item)} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:bg-white/10">Mark Sold</button>
@@ -503,92 +563,6 @@ const statCards = [
               </div>
             </>
           )}
-
-          {/* ── REPLENISHABLES TAB ── */}
-          {activeTab === "replenishables" && (() => {
-            const replenItems = items.filter((i: any) => i.is_replenishable);
-            return (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-semibold">Replenishables</h2>
-                    <p className="mt-1 text-sm text-slate-400">Items flagged as strong sellers — reorder when stock runs low.</p>
-                  </div>
-                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400">{replenItems.length} item{replenItems.length !== 1 ? "s" : ""}</span>
-                </div>
-
-                {replenItems.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-center rounded-[20px] border border-white/10 bg-[#081120]/50">
-                    <Star size={32} className="mb-3 text-slate-600" />
-                    <p className="text-base font-semibold text-white">No replenishables yet</p>
-                    <p className="mt-1 text-sm text-slate-500">Go to the Inventory tab and click the ⭐ star on items that sell well.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-hidden rounded-[20px] border border-white/10 bg-[#081120]/80">
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[700px] text-sm">
-                        <thead className="border-b border-white/10 bg-white/5 text-left text-slate-400">
-                          <tr>
-                            <th className="px-4 py-3 font-medium">Item</th>
-                            <th className="px-4 py-3 font-medium">Buy Price</th>
-                            <th className="px-4 py-3 font-medium">In Stock</th>
-                            <th className="px-4 py-3 font-medium">Units Sold</th>
-                            <th className="px-4 py-3 font-medium">Reorder Note</th>
-                            <th className="px-4 py-3 font-medium">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {replenItems.map((item: any) => (
-                            <tr key={item.id} className={`border-b border-white/5 hover:bg-white/[0.02] ${item.quantity_remaining === 0 ? "bg-red-500/5" : ""}`}>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <Star size={13} className="text-amber-400 flex-shrink-0 fill-amber-400" />
-                                  <span className="font-medium text-white">{item.item_name}</span>
-                                  {item.quantity_remaining === 0 && (
-                                    <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-xs text-red-400">OUT OF STOCK</span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-slate-300">£{Number(item.buy_price).toFixed(2)}</td>
-                              <td className="px-4 py-3">
-                                <span className={`font-medium ${item.quantity_remaining <= 2 ? "text-amber-400" : "text-slate-300"}`}>
-                                  {item.quantity_remaining}
-                                  {item.quantity_remaining <= 2 && item.quantity_remaining > 0 && <span className="ml-1 text-xs">⚠️</span>}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-slate-300">{item.quantity_sold ?? 0}</td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    value={reorderNotes[item.id] ?? item.reorder_note ?? ""}
-                                    onChange={e => setReorderNotes(prev => ({ ...prev, [item.id]: e.target.value }))}
-                                    placeholder="e.g. Order from Argos when < 3 left"
-                                    className="w-52 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white outline-none placeholder:text-slate-600 focus:border-blue-400/30"
-                                  />
-                                  <button onClick={() => saveReorderNote(item.id)}
-                                    className="text-xs text-slate-500 hover:text-blue-400 transition">Save</button>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3">
-                                <button
-                                  onClick={() => toggleReplenishable(item)}
-                                  disabled={togglingReplen === item.id}
-                                  className="flex items-center gap-1.5 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-500/20 transition disabled:opacity-50"
-                                >
-                                  {togglingReplen === item.id ? <Loader2 size={11} className="animate-spin" /> : <Star size={11} />}
-                                  Unstar
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
 
           {/* Premium-locked overlay */}
           {(activeTab === "ebay" || activeTab === "vinted" || activeTab === "receipts") && !isPremium && (
@@ -616,6 +590,71 @@ const statCards = [
       <EditItemModal open={showEditModal} onClose={handleCloseEditModal} onSuccess={fetchData} item={selectedItem} />
       <ExportCsvModal open={showExportModal} onClose={() => setShowExportModal(false)} sales={salesWithBuyPrice} />
       <BulkImportModal open={showBulkImportModal} onClose={() => setShowBulkImportModal(false)} onSuccess={fetchData} />
+      {/* Bulk Sell Modal */}
+      {showBulkSellModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md rounded-[24px] border border-white/10 bg-[#081120] p-6 shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold">Bulk Mark as Sold</h2>
+                <p className="mt-1 text-sm text-slate-400">{selectedItems.size} item{selectedItems.size !== 1 ? "s" : ""} selected</p>
+              </div>
+              <button onClick={() => setShowBulkSellModal(false)} className="text-slate-400 hover:text-white text-lg">✕</button>
+            </div>
+
+            {/* Selected items preview */}
+            <div className="mb-5 max-h-36 overflow-y-auto space-y-1.5 rounded-xl border border-white/10 bg-white/5 p-3">
+              {filteredItems.filter(i => selectedItems.has(i.id)).map(item => (
+                <div key={item.id} className="flex items-center justify-between text-sm">
+                  <span className="text-white truncate max-w-[220px]">{item.item_name}</span>
+                  <span className="text-slate-400 flex-shrink-0 ml-2">×{item.quantity_remaining} left</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-300">Sold Price (per unit) *</label>
+                <div className="flex items-center rounded-xl border border-white/10 bg-white/5 px-4">
+                  <span className="text-slate-500">£</span>
+                  <input type="number" step="0.01" value={bulkSellPrice}
+                    onChange={e => setBulkSellPrice(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full bg-transparent px-2 py-3 text-white outline-none placeholder:text-slate-600" />
+                </div>
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-300">Fees (per unit)</label>
+                <div className="flex items-center rounded-xl border border-white/10 bg-white/5 px-4">
+                  <span className="text-slate-500">£</span>
+                  <input type="number" step="0.01" value={bulkSellFees}
+                    onChange={e => setBulkSellFees(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full bg-transparent px-2 py-3 text-white outline-none placeholder:text-slate-600" />
+                </div>
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-300">Sold Date</label>
+                <input type="date" value={bulkSellDate} onChange={e => setBulkSellDate(e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none" />
+              </div>
+              <p className="text-xs text-slate-500">All remaining stock for each selected item will be marked as sold at this price.</p>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button onClick={handleBulkSell} disabled={!bulkSellPrice || bulkSelling}
+                className="flex-1 rounded-xl bg-emerald-500 py-3 text-sm font-semibold text-black disabled:opacity-50 hover:opacity-90 transition">
+                {bulkSelling ? "Selling..." : `Mark ${selectedItems.size} Item${selectedItems.size !== 1 ? "s" : ""} as Sold`}
+              </button>
+              <button onClick={() => setShowBulkSellModal(false)}
+                className="flex-1 rounded-xl border border-white/10 py-3 text-sm text-white hover:bg-white/5">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <SalesCardModal
         open={showSalesCard}
         onClose={() => { setShowSalesCard(false); setSalesCardItem(null); }}
