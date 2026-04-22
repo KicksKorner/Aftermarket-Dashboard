@@ -21,11 +21,13 @@ export async function POST() {
   function makeHeaders(t: string) {
     return {
       "Authorization": `Bearer ${t}`,
-      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
       "Accept": "application/json, text/plain, */*",
       "Accept-Language": "en-GB,en;q=0.9",
-      "Content-Type": "application/json",
-      "X-Anon-Id": "",
+      "X-Client-Id": "web",
+      "Referer": "https://www.vinted.co.uk/",
+      "Origin": "https://www.vinted.co.uk",
+      "Cache-Control": "no-cache",
       "Pragma": "no-cache",
     };
   }
@@ -93,9 +95,9 @@ export async function POST() {
   // Try fetching sold items using the correct Vinted endpoint
   // Try multiple endpoints as Vinted changes these periodically
   const endpoints = [
-    `https://www.vinted.co.uk/api/v2/my/sold_items?page=1&per_page=100`,
-    `https://www.vinted.co.uk/api/v2/users/${vintedUserId}/items?status=sold&page=1&per_page=100`,
-    `https://www.vinted.co.uk/api/v2/items?user_id=${vintedUserId}&status[]=sold&page=1&per_page=100`,
+    `https://www.vinted.co.uk/api/v2/my_orders?type=sold&status=completed&per_page=100&page=1`,
+    `https://www.vinted.co.uk/api/v2/my_orders?type=sold&per_page=100&page=1`,
+    `https://www.vinted.co.uk/api/v2/my_orders?status=completed&per_page=100&page=1`,
   ];
 
   let txRes: Response | null = null;
@@ -133,7 +135,11 @@ export async function POST() {
   console.log("Vinted working endpoint:", workingEndpoint);
 
   const txData = await txRes.json();
-  const items = txData.items || txData.sold_items || [];
+  console.log("Vinted response keys:", Object.keys(txData));
+  // my_orders endpoint returns { orders: [...] }
+  const items = txData.orders || txData.items || txData.sold_items || txData.transactions || [];
+  console.log(`Vinted response keys: ${Object.keys(txData).join(", ")} — ${items.length} orders`);
+  console.log(`Vinted returned ${items.length} items from ${workingEndpoint}`);
 
   if (!items.length) {
     return NextResponse.json({ synced: 0, matched: 0, message: "No sold items found on Vinted." });
@@ -149,11 +155,20 @@ export async function POST() {
   let matched = 0;
 
   for (const item of items) {
-    const vintedOrderId = String(item.id || item.transaction_id || "");
-    const title: string = item.title || item.item_title || "Vinted Item";
-    const price: number = parseFloat(item.price?.amount || item.price || "0");
-    const fees: number = parseFloat(item.service_fee?.amount || item.seller_fee?.amount || "0");
-    const soldDate: string = item.sold_at || item.created_at || new Date().toISOString();
+    const vintedOrderId = String(item.id || item.order_id || "");
+    // my_orders response: order has item{} nested inside
+    const itemData = item.item || item;
+    const title: string = itemData.title || item.title || "Vinted Item";
+    // Price: seller receives total_item_price minus fees
+    const totalPrice: number = parseFloat(
+      item.total_item_price?.amount || itemData.price?.amount || item.price?.amount || item.price || "0"
+    );
+    const price: number = totalPrice;
+    const fees: number = parseFloat(
+      item.service_fee?.amount || item.seller_fee?.amount ||
+      item.transaction_fee?.amount || "0"
+    );
+    const soldDate: string = item.updated_at || item.completed_at || item.created_at || new Date().toISOString();
     const soldDateStr = soldDate.split("T")[0];
 
     if (!vintedOrderId) continue;
