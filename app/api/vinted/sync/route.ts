@@ -50,7 +50,7 @@ export async function POST() {
         await supabase.from("vinted_connections").update({
           access_token: newToken,
           ...(data.refresh_token ? { refresh_token: data.refresh_token } : {}),
-        }).eq("user_id", user.id);
+        }).eq("user_id", user!.id);
         return newToken;
       }
     } catch { return null; }
@@ -81,7 +81,7 @@ export async function POST() {
     const meData = await meRes.json();
     vintedUserId = String(meData.user?.id || "");
     if (vintedUserId) {
-      await supabase.from("vinted_connections").update({ vinted_user_id: vintedUserId }).eq("user_id", user.id);
+      await supabase.from("vinted_connections").update({ vinted_user_id: vintedUserId }).eq("user_id", user!.id);
     }
   }
 
