@@ -19,8 +19,15 @@ type PremiumMember = {
   expiry_date: string | null;
   notes: string | null;
   active: boolean;
+  onboarding_complete: boolean;
+  discord_invite_sent: boolean;
+  last_contacted: string | null;
+  payment_method: string | null;
+  amount_paid: number | null;
   created_at: string;
 };
+
+const PAYMENT_METHODS = ["PayPal", "Bank Transfer", "Cash", "Crypto", "Card", "Other"];
 
 const PACKAGE_CONFIG: Record<Package, { label: string; color: string; months: number | null }> = {
   "6_months":  { label: "6 Months",  color: "border-blue-500/20 bg-blue-500/10 text-blue-300",    months: 6 },
@@ -56,6 +63,8 @@ export default function PremiumMembersPage() {
   const [newPackage, setNewPackage] = useState<Package>("lifetime");
   const [newStartDate, setNewStartDate] = useState(new Date().toISOString().split("T")[0]);
   const [newNotes, setNewNotes] = useState("");
+  const [newPaymentMethod, setNewPaymentMethod] = useState("");
+  const [newAmountPaid, setNewAmountPaid] = useState("");
 
   // Edit form
   const [editUsername, setEditUsername] = useState("");
@@ -63,6 +72,11 @@ export default function PremiumMembersPage() {
   const [editStartDate, setEditStartDate] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editActive, setEditActive] = useState(true);
+  const [editOnboarding, setEditOnboarding] = useState(false);
+  const [editDiscordSent, setEditDiscordSent] = useState(false);
+  const [editLastContacted, setEditLastContacted] = useState("");
+  const [editPaymentMethod, setEditPaymentMethod] = useState("");
+  const [editAmountPaid, setEditAmountPaid] = useState("");
 
   useEffect(() => { fetchMembers(); }, []);
 
@@ -87,10 +101,15 @@ export default function PremiumMembersPage() {
       expiry_date: expiry,
       notes: newNotes.trim() || null,
       active: true,
+      onboarding_complete: false,
+      discord_invite_sent: false,
+      payment_method: newPaymentMethod || null,
+      amount_paid: newAmountPaid ? parseFloat(newAmountPaid) : null,
     });
     setNewUsername(""); setNewPackage("lifetime");
     setNewStartDate(new Date().toISOString().split("T")[0]);
-    setNewNotes(""); setShowAdd(false); setSaving(false);
+    setNewNotes(""); setNewPaymentMethod(""); setNewAmountPaid("");
+    setShowAdd(false); setSaving(false);
     fetchMembers();
   }
 
@@ -101,6 +120,11 @@ export default function PremiumMembersPage() {
     setEditStartDate(m.start_date);
     setEditNotes(m.notes || "");
     setEditActive(m.active);
+    setEditOnboarding(m.onboarding_complete || false);
+    setEditDiscordSent(m.discord_invite_sent || false);
+    setEditLastContacted(m.last_contacted || "");
+    setEditPaymentMethod(m.payment_method || "");
+    setEditAmountPaid(m.amount_paid ? String(m.amount_paid) : "");
   }
 
   async function handleSaveEdit(id: string) {
@@ -113,6 +137,11 @@ export default function PremiumMembersPage() {
       expiry_date: expiry,
       notes: editNotes.trim() || null,
       active: editActive,
+      onboarding_complete: editOnboarding,
+      discord_invite_sent: editDiscordSent,
+      last_contacted: editLastContacted || null,
+      payment_method: editPaymentMethod || null,
+      amount_paid: editAmountPaid ? parseFloat(editAmountPaid) : null,
       updated_at: new Date().toISOString(),
     }).eq("id", id);
     setEditingId(null); setSaving(false);
@@ -130,6 +159,16 @@ export default function PremiumMembersPage() {
     fetchMembers();
   }
 
+  async function toggleOnboarding(m: PremiumMember) {
+    await supabase.from("premium_members").update({ onboarding_complete: !m.onboarding_complete }).eq("id", m.id);
+    fetchMembers();
+  }
+
+  async function toggleDiscordSent(m: PremiumMember) {
+    await supabase.from("premium_members").update({ discord_invite_sent: !m.discord_invite_sent }).eq("id", m.id);
+    fetchMembers();
+  }
+
   const filtered = members.filter(m => {
     const matchSearch = m.discord_username.toLowerCase().includes(search.toLowerCase());
     const isExpired = m.expiry_date ? daysRemaining(m.expiry_date) <= 0 : false;
@@ -143,6 +182,8 @@ export default function PremiumMembersPage() {
   const activeCount = members.filter(m => m.active && (!m.expiry_date || daysRemaining(m.expiry_date) > 0)).length;
   const expiredCount = members.filter(m => m.expiry_date && daysRemaining(m.expiry_date) <= 0).length;
   const lifetimeCount = members.filter(m => m.package === "lifetime" && m.active).length;
+  const onboardedCount = members.filter(m => m.onboarding_complete).length;
+  const totalRevenue = members.reduce((s, m) => s + (m.amount_paid || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -164,11 +205,13 @@ export default function PremiumMembersPage() {
       </section>
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-5">
         {[
           { label: "Active Members", value: activeCount, icon: CheckCircle, color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/10" },
           { label: "Lifetime Members", value: lifetimeCount, icon: Crown, color: "text-amber-400 border-amber-500/20 bg-amber-500/10" },
+          { label: "Onboarded", value: `${onboardedCount}/${members.length}`, icon: CheckCircle, color: "text-blue-400 border-blue-500/20 bg-blue-500/10" },
           { label: "Expired / Inactive", value: expiredCount, icon: AlertCircle, color: "text-red-400 border-red-500/20 bg-red-500/10" },
+          { label: "Total Revenue", value: `£${totalRevenue.toFixed(2)}`, icon: Crown, color: "text-violet-400 border-violet-500/20 bg-violet-500/10" },
         ].map(s => {
           const Icon = s.icon;
           return (
@@ -211,6 +254,18 @@ export default function PremiumMembersPage() {
               <label className="mb-2 block text-xs font-medium text-slate-400">Notes (optional)</label>
               <input value={newNotes} onChange={e => setNewNotes(e.target.value)}
                 placeholder="e.g. Lifetime unpaid" className={inputCls} />
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-medium text-slate-400">Payment Method</label>
+              <select value={newPaymentMethod} onChange={e => setNewPaymentMethod(e.target.value)} className={inputCls}>
+                <option value="">Select...</option>
+                {PAYMENT_METHODS.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-medium text-slate-400">Amount Paid (£)</label>
+              <input type="number" step="0.01" value={newAmountPaid} onChange={e => setNewAmountPaid(e.target.value)}
+                placeholder="0.00" className={inputCls} />
             </div>
           </div>
           {newPackage !== "lifetime" && newStartDate && (
@@ -265,6 +320,9 @@ export default function PremiumMembersPage() {
                 <th className="px-4 py-3 font-medium">Start Date</th>
                 <th className="px-4 py-3 font-medium">Expiry</th>
                 <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium text-center">Onboarded</th>
+                <th className="px-4 py-3 font-medium text-center">Discord</th>
+                <th className="px-4 py-3 font-medium">Payment</th>
                 <th className="px-4 py-3 font-medium">Notes</th>
                 <th className="px-4 py-3 font-medium">Actions</th>
               </tr>
@@ -312,6 +370,25 @@ export default function PremiumMembersPage() {
                           className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${editActive ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" : "border-red-500/20 bg-red-500/10 text-red-300"}`}>
                           {editActive ? "Active" : "Inactive"}
                         </button>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button onClick={() => setEditOnboarding(!editOnboarding)}
+                          className={`h-5 w-5 rounded border-2 flex items-center justify-center mx-auto transition ${editOnboarding ? "border-emerald-500 bg-emerald-500" : "border-white/20 bg-transparent"}`}>
+                          {editOnboarding && <span className="text-white text-xs">✓</span>}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button onClick={() => setEditDiscordSent(!editDiscordSent)}
+                          className={`h-5 w-5 rounded border-2 flex items-center justify-center mx-auto transition ${editDiscordSent ? "border-blue-500 bg-blue-500" : "border-white/20 bg-transparent"}`}>
+                          {editDiscordSent && <span className="text-white text-xs">✓</span>}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <select value={editPaymentMethod} onChange={e => setEditPaymentMethod(e.target.value)}
+                          className="rounded-xl border border-white/10 bg-[#030814] px-2 py-1.5 text-xs text-white outline-none w-28">
+                          <option value="">None</option>
+                          {PAYMENT_METHODS.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
                       </td>
                       <td className="px-4 py-3">
                         <input value={editNotes} onChange={e => setEditNotes(e.target.value)}
@@ -370,6 +447,23 @@ export default function PremiumMembersPage() {
                         }`}>
                         {!m.active ? "Inactive" : isExpired ? "Expired" : "Active"}
                       </button>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button onClick={() => toggleOnboarding(m)}
+                        title={m.onboarding_complete ? "Mark incomplete" : "Mark complete"}
+                        className={`h-5 w-5 rounded border-2 flex items-center justify-center mx-auto transition ${m.onboarding_complete ? "border-emerald-500 bg-emerald-500" : "border-white/20 bg-transparent hover:border-emerald-500/50"}`}>
+                        {m.onboarding_complete && <span className="text-white text-xs font-bold">✓</span>}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button onClick={() => toggleDiscordSent(m)}
+                        title={m.discord_invite_sent ? "Discord sent" : "Discord not sent"}
+                        className={`h-5 w-5 rounded border-2 flex items-center justify-center mx-auto transition ${m.discord_invite_sent ? "border-blue-500 bg-blue-500" : "border-white/20 bg-transparent hover:border-blue-500/50"}`}>
+                        {m.discord_invite_sent && <span className="text-white text-xs font-bold">✓</span>}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-400">
+                      {m.payment_method || "—"}
                     </td>
                     <td className="px-4 py-3 text-slate-500 text-xs max-w-[120px] truncate">
                       {m.notes || "—"}
