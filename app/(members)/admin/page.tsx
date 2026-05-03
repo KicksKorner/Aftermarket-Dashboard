@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AdminSubnav from "@/components/admin-subnav";
@@ -76,7 +76,7 @@ export default async function AdminOverviewPage() {
   href="/admin/pokemon-investments"
   className="rounded-[24px] border border-yellow-500/20 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-yellow-400/30"
 >
-  <h2 className="text-xl font-semibold">🃏 Pokémon Investments</h2>
+  <h2 className="text-xl font-semibold">ðŸƒ PokÃ©mon Investments</h2>
   <p className="mt-2 text-sm text-slate-400">
     Compose and send weekly investment breakdowns to Discord.
   </p>
@@ -86,7 +86,7 @@ export default async function AdminOverviewPage() {
             href="/admin/activity"
             className="rounded-[24px] border border-amber-500/20 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-amber-400/30"
           >
-            <h2 className="text-xl font-semibold">🏆 Member Activity</h2>
+            <h2 className="text-xl font-semibold">ðŸ† Member Activity</h2>
             <p className="mt-2 text-sm text-slate-400">
               Leaderboard showing member engagement, sales logged, revenue and platform usage.
             </p>
@@ -96,9 +96,19 @@ export default async function AdminOverviewPage() {
             href="/admin/premium-members"
             className="rounded-[24px] border border-violet-500/20 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-violet-400/30"
           >
-            <h2 className="text-xl font-semibold">👑 Premium Members</h2>
+            <h2 className="text-xl font-semibold">ðŸ‘‘ Premium Members</h2>
             <p className="mt-2 text-sm text-slate-400">
               Manage member packages, expiry dates and access levels.
+            </p>
+          </Link>
+
+          <Link
+            href="/admin/deal-formatter"
+            className="rounded-[24px] border border-violet-500/20 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-violet-400/30"
+          >
+            <h2 className="text-xl font-semibold">🪄 AI Deal Formatter</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Paste raw deal info â€” Claude rewrites it into a polished Discord embed.
             </p>
           </Link>
         </div>
@@ -106,3 +116,6 @@ export default async function AdminOverviewPage() {
     </main>
   );
 }
+
+
+
