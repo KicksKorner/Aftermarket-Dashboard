@@ -13,25 +13,34 @@ export async function POST(req: NextRequest) {
   const file = formData.get("file") as File;
   if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
 
-  const ext = file.name.split(".").pop() || "jpg";
+  // Ensure proper extension
+  const mimeToExt: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/gif": "gif",
+    "image/webp": "webp",
+  };
+  const ext = mimeToExt[file.type] || file.name.split(".").pop() || "jpg";
   const fileName = `deal-images/${Date.now()}.${ext}`;
   const buffer = await file.arrayBuffer();
 
-  const { data, error } = await supabase.storage
+  const { error } = await supabase.storage
     .from("public-assets")
     .upload(fileName, buffer, {
-      contentType: file.type,
+      contentType: file.type || `image/${ext}`,
       upsert: true,
     });
 
   if (error) {
     console.error("Storage upload error:", error);
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+    return NextResponse.json({ error: `Upload failed: ${error.message}` }, { status: 500 });
   }
 
   const { data: urlData } = supabase.storage
     .from("public-assets")
     .getPublicUrl(fileName);
 
+  console.log("Uploaded image URL:", urlData.publicUrl);
   return NextResponse.json({ url: urlData.publicUrl });
 }

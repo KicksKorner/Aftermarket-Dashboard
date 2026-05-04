@@ -19,8 +19,7 @@ export async function POST(req: NextRequest) {
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if (profile?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
-  const { payload, channel, imageUrl } = body;
+  const { payload, channel, imageUrl } = await req.json();
   if (!payload) return NextResponse.json({ error: "No payload" }, { status: 400 });
 
   const webhookUrl = WEBHOOK_MAP[channel];
@@ -30,43 +29,40 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-
-
-  // If we have an image URL from Supabase, fetch it and send as attachment
-  // This ensures Discord renders it properly
-  if (imageUrl && imageUrl.startsWith("http")) {
+  // If we have an image, fetch it from Supabase and send as multipart
+  if (imageUrl) {
     try {
       const imgRes = await fetch(imageUrl);
       if (imgRes.ok) {
         const imgBuffer = await imgRes.arrayBuffer();
         const contentType = imgRes.headers.get("content-type") || "image/jpeg";
-        const ext = contentType.split("/")[1]?.split("+")[0] || "jpg";
-        const filename = `deal-image.${ext}`;
+        const ext = contentType.includes("png") ? "png" : contentType.includes("gif") ? "gif" : contentType.includes("webp") ? "webp" : "jpg";
+        const filename = `image.${ext}`;
 
-        // Update embed to reference the attachment
-        if (payload.embeds?.[0]) {
-          payload.embeds[0].image = { url: `attachment://${filename}` };
+        // Set embed image to use attachment reference
+        const payloadWithImage = JSON.parse(JSON.stringify(payload));
+        if (payloadWithImage.embeds?.[0]) {
+          payloadWithImage.embeds[0].image = { url: `attachment://${filename}` };
         }
 
-        const formData = new FormData();
-        formData.append("payload_json", JSON.stringify(payload));
-        formData.append("files[0]", new Blob([imgBuffer], { type: contentType }), filename);
+        const form = new FormData();
+        form.append("payload_json", JSON.stringify(payloadWithImage));
+        form.append("files[0]", new Blob([imgBuffer], { type: contentType }), filename);
 
-        const res = await fetch(webhookUrl, { method: "POST", body: formData });
-        if (!res.ok) {
-          const err = await res.text();
-          console.error("Discord error with attachment:", err);
-          // Fall through to try without attachment
-        } else {
-          return NextResponse.json({ ok: true });
-        }
+        const discordRes = await fetch(webhookUrl, { method: "POST", body: form });
+
+        if (discordRes.ok) return NextResponse.json({ ok: true });
+
+        const errText = await discordRes.text();
+        console.error("Discord multipart error:", discordRes.status, errText);
+        // Fall through to JSON send without image
       }
     } catch (e) {
-      console.error("Image attachment failed, sending without:", e);
+      console.error("Image fetch/send error:", e);
     }
   }
 
-  // Send without image attachment (or as fallback)
+  // Send as plain JSON (no image or fallback)
   const res = await fetch(webhookUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -75,8 +71,8 @@ export async function POST(req: NextRequest) {
 
   if (!res.ok) {
     const err = await res.text();
-    console.error("Discord error:", err);
-    return NextResponse.json({ error: "Discord rejected the message: " + err }, { status: 500 });
+    console.error("Discord JSON error:", res.status, err);
+    return NextResponse.json({ error: `Discord error ${res.status}: ${err}` }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

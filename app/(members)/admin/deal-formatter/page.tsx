@@ -92,8 +92,13 @@ export default function DealFormatterPage() {
       });
       const data = await res.json();
       if (res.ok && data.payload) {
-        setPreview(data.payload);
-        setRawJson(JSON.stringify(data.payload, null, 2));
+        const payload = data.payload;
+        // Force image into embed if we have one
+        if (imageUrl && payload.embeds?.[0]) {
+          payload.embeds[0].image = { url: imageUrl };
+        }
+        setPreview(payload);
+        setRawJson(JSON.stringify(payload, null, 2));
       } else {
         setError(data.error || "Failed to format. Try again.");
       }
