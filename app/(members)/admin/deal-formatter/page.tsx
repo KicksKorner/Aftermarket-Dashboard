@@ -109,7 +109,7 @@ export default function DealFormatterPage() {
       const res = await fetch("/api/admin/send-deal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payload: preview, channel }),
+        body: JSON.stringify({ payload: preview, channel, imageUrl }),
       });
       if (res.ok) {
         setSent(true);
