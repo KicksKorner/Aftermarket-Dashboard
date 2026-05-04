@@ -46,6 +46,37 @@ export default function DealFormatterPage() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [viewMode, setViewMode] = useState<"visual" | "json">("visual");
+  const [imageUrl, setImageUrl] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>("");
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  async function handleImageUpload(file: File) {
+    setUploadingImage(true);
+    // Show local preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setImagePreview(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    // Upload via our server route to get a public URL
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/admin/upload-image", {
+        method: "POST",
+        body: formData,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setImageUrl(data.url);
+      }
+    } catch {
+      console.error("Image upload failed");
+    }
+    setUploadingImage(false);
+  }
 
   async function handleFormat() {
     if (!rawInput.trim()) return;
@@ -57,7 +88,7 @@ export default function DealFormatterPage() {
       const res = await fetch("/api/admin/format-deal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ raw: rawInput, channel, style }),
+        body: JSON.stringify({ raw: rawInput, channel, style, imageUrl }),
       });
       const data = await res.json();
       if (res.ok && data.payload) {
@@ -157,9 +188,35 @@ export default function DealFormatterPage() {
               </div>
             </div>
 
+            {/* Image upload */}
+            <div>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">3 — Add image (optional)</p>
+              <div className="flex items-center gap-3">
+                <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-slate-400 hover:text-white hover:border-white/20 transition">
+                  <input type="file" accept="image/*" className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) { setImageFile(f); handleImageUpload(f); } }} />
+                  {uploadingImage ? <><span className="animate-spin">⟳</span> Uploading...</> : "📎 Browse & attach image"}
+                </label>
+                {imagePreview && (
+                  <div className="flex items-center gap-2">
+                    <img src={imagePreview} alt="" className="h-10 w-10 rounded-lg object-cover border border-white/10" />
+                    <button onClick={() => { setImageFile(null); setImagePreview(""); setImageUrl(""); }}
+                      className="text-xs text-red-400 hover:text-red-300">Remove</button>
+                  </div>
+                )}
+                {!imagePreview && (
+                  <div className="flex-1">
+                    <input value={imageUrl} onChange={e => setImageUrl(e.target.value)}
+                      placeholder="Or paste image URL directly"
+                      className="w-full rounded-xl border border-white/10 bg-[#030814] px-3 py-2.5 text-sm text-white placeholder-slate-700 outline-none focus:border-violet-400/30 transition" />
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Raw input */}
             <div>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">3 — Paste your raw info</p>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">4 — Paste your raw info</p>
               <textarea
                 value={rawInput}
                 onChange={e => setRawInput(e.target.value)}

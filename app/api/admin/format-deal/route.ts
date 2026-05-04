@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if (profile?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { raw, channel, style } = await req.json();
+  const { raw, channel, style, imageUrl } = await req.json();
   if (!raw?.trim()) return NextResponse.json({ error: "No input provided" }, { status: 400 });
 
   const channelCtx = CHANNEL_CONTEXT[channel] || "general reselling deals";
@@ -108,7 +108,7 @@ Response format:
       model: "claude-sonnet-4-20250514",
       max_tokens: 2000,
       system: systemPrompt,
-      messages: [{ role: "user", content: `Format this into a Discord embed:\n\n${raw}` }],
+      messages: [{ role: "user", content: `Format this into a Discord embed:\n\n${raw}${imageUrl ? `\n\nImage URL to include in the embed image field: ${imageUrl}` : ""}` }],
     }),
   });
 

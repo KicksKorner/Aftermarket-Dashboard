@@ -8,7 +8,7 @@ const WEBHOOK_MAP: Record<string, string | undefined> = {
   member_flips:        process.env.MEMBER_FLIPS_DISCORD_WEBHOOK_URL,
   pokemon_flips:       process.env.POKEMON_FLIPS_DISCORD_WEBHOOK_URL,
   sneaker_streetwear:  process.env.SNEAKERS_CLOTHING_DISCORD_WEBHOOK_URL,
-  pokemon_investments: process.env.DISCORD_WEBHOOK_AMAZON, // reuse your existing pokemon investments webhook
+  pokemon_investments: process.env.POKEMON_INVESTMENTS_DISCORD_WEBHOOK_URL,
 };
 
 export async function POST(req: NextRequest) {
