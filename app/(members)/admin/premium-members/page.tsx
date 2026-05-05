@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   Plus, Edit2, Trash2, Save, X, Users, Crown,
-  Calendar, CheckCircle, AlertCircle, Clock, Loader2,
+  Calendar, CheckCircle, AlertCircle, Clock, Loader2, Bell, Phone,
 } from "lucide-react";
 
 const supabase = createClient();
@@ -24,6 +24,9 @@ type PremiumMember = {
   last_contacted: string | null;
   payment_method: string | null;
   amount_paid: number | null;
+  appointment_date: string | null;
+  appointment_time: string | null;
+  appointment_notes: string | null;
   created_at: string;
 };
 
@@ -65,6 +68,9 @@ export default function PremiumMembersPage() {
   const [newNotes, setNewNotes] = useState("");
   const [newPaymentMethod, setNewPaymentMethod] = useState("");
   const [newAmountPaid, setNewAmountPaid] = useState("");
+  const [newAppointmentDate, setNewAppointmentDate] = useState("");
+  const [newAppointmentTime, setNewAppointmentTime] = useState("");
+  const [newAppointmentNotes, setNewAppointmentNotes] = useState("");
 
   // Edit form
   const [editUsername, setEditUsername] = useState("");
@@ -77,6 +83,9 @@ export default function PremiumMembersPage() {
   const [editLastContacted, setEditLastContacted] = useState("");
   const [editPaymentMethod, setEditPaymentMethod] = useState("");
   const [editAmountPaid, setEditAmountPaid] = useState("");
+  const [editAppointmentDate, setEditAppointmentDate] = useState("");
+  const [editAppointmentTime, setEditAppointmentTime] = useState("");
+  const [editAppointmentNotes, setEditAppointmentNotes] = useState("");
 
   useEffect(() => { fetchMembers(); }, []);
 
@@ -105,6 +114,9 @@ export default function PremiumMembersPage() {
       discord_invite_sent: false,
       payment_method: newPaymentMethod || null,
       amount_paid: newAmountPaid ? parseFloat(newAmountPaid) : null,
+      appointment_date: newAppointmentDate || null,
+      appointment_time: newAppointmentTime || null,
+      appointment_notes: newAppointmentNotes || null,
     });
     setNewUsername(""); setNewPackage("lifetime");
     setNewStartDate(new Date().toISOString().split("T")[0]);
@@ -125,6 +137,9 @@ export default function PremiumMembersPage() {
     setEditLastContacted(m.last_contacted || "");
     setEditPaymentMethod(m.payment_method || "");
     setEditAmountPaid(m.amount_paid ? String(m.amount_paid) : "");
+    setEditAppointmentDate(m.appointment_date || "");
+    setEditAppointmentTime(m.appointment_time || "");
+    setEditAppointmentNotes(m.appointment_notes || "");
   }
 
   async function handleSaveEdit(id: string) {
@@ -142,6 +157,9 @@ export default function PremiumMembersPage() {
       last_contacted: editLastContacted || null,
       payment_method: editPaymentMethod || null,
       amount_paid: editAmountPaid ? parseFloat(editAmountPaid) : null,
+      appointment_date: editAppointmentDate || null,
+      appointment_time: editAppointmentTime || null,
+      appointment_notes: editAppointmentNotes || null,
       updated_at: new Date().toISOString(),
     }).eq("id", id);
     setEditingId(null); setSaving(false);
@@ -184,6 +202,10 @@ export default function PremiumMembersPage() {
   const lifetimeCount = members.filter(m => m.package === "lifetime" && m.active).length;
   const onboardedCount = members.filter(m => m.onboarding_complete).length;
   const totalRevenue = members.reduce((s, m) => s + (m.amount_paid || 0), 0);
+  const upcomingAppointments = members.filter(m => {
+    if (!m.appointment_date) return false;
+    return new Date(m.appointment_date) >= new Date(new Date().toDateString());
+  }).sort((a, b) => new Date(a.appointment_date!).getTime() - new Date(b.appointment_date!).getTime());
 
   return (
     <div className="space-y-6">
@@ -267,6 +289,19 @@ export default function PremiumMembersPage() {
               <input type="number" step="0.01" value={newAmountPaid} onChange={e => setNewAmountPaid(e.target.value)}
                 placeholder="0.00" className={inputCls} />
             </div>
+            <div>
+              <label className="mb-2 block text-xs font-medium text-slate-400">Onboarding Call Date</label>
+              <input type="date" value={newAppointmentDate} onChange={e => setNewAppointmentDate(e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-medium text-slate-400">Call Time</label>
+              <input type="time" value={newAppointmentTime} onChange={e => setNewAppointmentTime(e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-medium text-slate-400">Call Notes</label>
+              <input value={newAppointmentNotes} onChange={e => setNewAppointmentNotes(e.target.value)}
+                placeholder="e.g. WhatsApp call, discuss setup" className={inputCls} />
+            </div>
           </div>
           {newPackage !== "lifetime" && newStartDate && (
             <p className="text-xs text-slate-500">
@@ -283,6 +318,46 @@ export default function PremiumMembersPage() {
               className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-white hover:bg-white/5 transition">
               Cancel
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Upcoming appointments panel */}
+      {upcomingAppointments.length > 0 && (
+        <div className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.72),rgba(5,10,26,0.88))] p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Bell size={15} className="text-amber-400" />
+            <h3 className="text-sm font-semibold text-white">Upcoming Onboarding Calls</h3>
+            <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">{upcomingAppointments.length}</span>
+          </div>
+          <div className="space-y-2">
+            {upcomingAppointments.slice(0, 5).map(m => {
+              const isToday = m.appointment_date === new Date().toISOString().split("T")[0];
+              const daysDiff = Math.ceil((new Date(m.appointment_date!).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+              return (
+                <div key={m.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${
+                  isToday ? "border-amber-500/20 bg-amber-500/10" : "border-white/5 bg-white/[0.03]"
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold ${
+                      isToday ? "bg-amber-500/20 text-amber-300" : "bg-white/5 text-slate-400"
+                    }`}>
+                      {isToday ? "!" : daysDiff}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-white">{m.discord_username}</p>
+                      {m.appointment_notes && <p className="text-xs text-slate-500">{m.appointment_notes}</p>}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-sm font-semibold ${isToday ? "text-amber-300" : "text-slate-300"}`}>
+                      {isToday ? "TODAY" : new Date(m.appointment_date!).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
+                    </p>
+                    {m.appointment_time && <p className="text-xs text-slate-500">{m.appointment_time}</p>}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -324,6 +399,7 @@ export default function PremiumMembersPage() {
                 <th className="px-4 py-3 font-medium text-center">Discord</th>
                 <th className="px-4 py-3 font-medium">Payment</th>
                 <th className="px-4 py-3 font-medium">Notes</th>
+                <th className="px-4 py-3 font-medium">Appointment</th>
                 <th className="px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
@@ -384,16 +460,39 @@ export default function PremiumMembersPage() {
                         </button>
                       </td>
                       <td className="px-4 py-3">
-                        <select value={editPaymentMethod} onChange={e => setEditPaymentMethod(e.target.value)}
-                          className="rounded-xl border border-white/10 bg-[#030814] px-2 py-1.5 text-xs text-white outline-none w-28">
-                          <option value="">None</option>
-                          {PAYMENT_METHODS.map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
+                        <div className="space-y-1.5">
+                          <select value={editPaymentMethod} onChange={e => setEditPaymentMethod(e.target.value)}
+                            className="w-28 rounded-xl border border-white/10 bg-[#030814] px-2 py-1.5 text-xs text-white outline-none">
+                            <option value="">None</option>
+                            {PAYMENT_METHODS.map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+                          <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-[#030814] px-2 py-1.5 w-28">
+                            <span className="text-slate-500 text-xs">£</span>
+                            <input
+                              type="number" step="0.01" min="0"
+                              value={editAmountPaid}
+                              onChange={e => setEditAmountPaid(e.target.value)}
+                              placeholder="0.00"
+                              className="w-full bg-transparent text-xs text-white outline-none placeholder:text-slate-600"
+                            />
+                          </div>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <input value={editNotes} onChange={e => setEditNotes(e.target.value)}
                           placeholder="Notes..."
                           className="w-32 rounded-xl border border-white/10 bg-[#030814] px-3 py-1.5 text-xs text-white outline-none" />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="space-y-1.5">
+                          <input type="date" value={editAppointmentDate} onChange={e => setEditAppointmentDate(e.target.value)}
+                            className="w-36 rounded-xl border border-white/10 bg-[#030814] px-2 py-1.5 text-xs text-white outline-none" />
+                          <input type="time" value={editAppointmentTime} onChange={e => setEditAppointmentTime(e.target.value)}
+                            className="w-36 rounded-xl border border-white/10 bg-[#030814] px-2 py-1.5 text-xs text-white outline-none" />
+                          <input value={editAppointmentNotes} onChange={e => setEditAppointmentNotes(e.target.value)}
+                            placeholder="Call notes..."
+                            className="w-36 rounded-xl border border-white/10 bg-[#030814] px-2 py-1.5 text-xs text-white outline-none" />
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1.5">
@@ -467,6 +566,31 @@ export default function PremiumMembersPage() {
                     </td>
                     <td className="px-4 py-3 text-slate-500 text-xs max-w-[120px] truncate">
                       {m.notes || "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {m.appointment_date ? (() => {
+                        const apptDate = new Date(m.appointment_date + (m.appointment_time ? `T${m.appointment_time}` : ""));
+                        const isToday = m.appointment_date === new Date().toISOString().split("T")[0];
+                        const isPast = apptDate < new Date();
+                        const isSoon = !isPast && (apptDate.getTime() - Date.now()) < 24 * 60 * 60 * 1000;
+                        return (
+                          <div className={`rounded-xl border px-2.5 py-2 text-xs ${
+                            isToday ? "border-amber-500/30 bg-amber-500/10" :
+                            isSoon ? "border-blue-500/30 bg-blue-500/10" :
+                            isPast ? "border-white/5 bg-white/[0.02] opacity-50" :
+                            "border-white/10 bg-white/5"
+                          }`}>
+                            <div className="flex items-center gap-1.5">
+                              <Phone size={10} className={isToday ? "text-amber-400" : isSoon ? "text-blue-400" : "text-slate-500"} />
+                              <span className={`font-medium ${isToday ? "text-amber-300" : isSoon ? "text-blue-300" : "text-slate-300"}`}>
+                                {isToday ? "TODAY" : new Date(m.appointment_date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                              </span>
+                            </div>
+                            {m.appointment_time && <p className="mt-0.5 text-slate-500">{m.appointment_time}</p>}
+                            {m.appointment_notes && <p className="mt-0.5 text-slate-600 truncate max-w-[120px]">{m.appointment_notes}</p>}
+                          </div>
+                        );
+                      })() : <span className="text-slate-700 text-xs">—</span>}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1.5">
