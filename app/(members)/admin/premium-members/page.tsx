@@ -511,7 +511,11 @@ export default function PremiumMembersPage() {
                 }
 
                 return (
-                  <tr key={m.id} className={`border-b border-white/5 hover:bg-white/[0.02] transition ${!m.active || isExpired ? "opacity-60" : ""}`}>
+                  <tr key={m.id} className={`border-b transition ${
+                    !m.active || isExpired ? "opacity-50 border-white/5 hover:bg-white/[0.02]" :
+                    m.amount_paid && m.amount_paid > 0 ? "border-emerald-500/10 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.07]" :
+                    "border-white/5 bg-red-500/[0.03] hover:bg-red-500/[0.05]"
+                  }`}>
                     <td className="px-4 py-3">
                       <span className="font-medium text-white">{m.discord_username}</span>
                     </td>
