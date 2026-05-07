@@ -24,15 +24,13 @@ type NavItem = {
 const navItems: NavItem[] = [
   { href: "/admin", label: "Admin", icon: Shield, adminOnly: true },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/sole-scan", label: "Sole Scan", icon: Footprints, startsWith: true, premiumLocked: true, lockedHref: "/upgrade" },
   { href: "/dashboard/vinted-bot", label: "Vinted Bot", icon: ShoppingBag, startsWith: true, premiumLocked: true, lockedHref: "/vinted-bot" },
   { href: "/dashboard/gmail-sync", label: "Gmail Sync", icon: Mail, startsWith: true, premiumLocked: true, lockedHref: "/upgrade" },
   { href: "/dashboard/inventory", label: "AIO Tracker", icon: Boxes, startsWith: true },
   { href: "/dashboard/expenses", label: "Expenses", icon: Receipt, startsWith: true },
   { href: "/dashboard/profit-calculator", label: "Profit Calculator", icon: Calculator, startsWith: true },
   { href: "/dashboard/vat-tracker", label: "VAT Tracker", icon: PoundSterling, startsWith: true },
-  { href: "/dashboard/tickets", label: "Tickets", icon: Ticket, startsWith: true },
-  { href: "/dashboard/pokemon-checkouts", label: "Pokémon Checkouts", icon: Gamepad2, startsWith: true },
+  { href: "/dashboard/pokemon-checkouts", label: "Pokémon Orders", icon: Gamepad2, startsWith: true },
   { href: "/guides", label: "Guides", icon: BookOpen },
 ];
 
