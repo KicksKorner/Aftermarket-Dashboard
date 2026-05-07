@@ -177,6 +177,20 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
     if (!error) fetchData();
   }
 
+  const [clearingAll, setClearingAll] = useState(false);
+
+  async function handleClearAll() {
+    if (!window.confirm("This will permanently delete ALL inventory items and ALL sales records. This cannot be undone. Are you sure?")) return;
+    if (!window.confirm("Last chance — delete everything and start fresh?")) return;
+    setClearingAll(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setClearingAll(false); return; }
+    await supabase.from("inventory_sales").delete().eq("user_id", user.id);
+    await supabase.from("inventory_items").delete().eq("user_id", user.id);
+    setClearingAll(false);
+    fetchData();
+  }
+
   function toggleSelectItem(id: string) {
     setSelectedItems(prev => {
       const next = new Set(prev);
@@ -408,6 +422,10 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
                     </>
                   )}
                   <button onClick={() => setShowAddModal(true)} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-black hover:opacity-90">Add Item</button>
+                  <button onClick={handleClearAll} disabled={clearingAll}
+                    className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-500/20 transition disabled:opacity-50">
+                    {clearingAll ? "Clearing..." : "Clear All Inventory"}
+                  </button>
                   {selectedItems.size > 0 && (
                     <button onClick={() => setShowBulkSellModal(true)}
                       className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/25 transition">
