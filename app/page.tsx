@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { Lock, BookOpen, TrendingUp } from "lucide-react";
 
 export default function HomePage() {
   return (
@@ -42,18 +43,13 @@ export default function HomePage() {
             >
               Member Login
             </Link>
-
-            <Link
-              href="/dashboard"
-              className="rounded-2xl border border-white/10 bg-white/5 px-8 py-4 text-base font-medium text-white transition hover:bg-white/10"
-            >
-              View Dashboard
-            </Link>
           </div>
 
           <div className="mt-16 grid gap-4 md:grid-cols-3">
             <div className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-6 text-left shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-              <div className="mb-4 h-11 w-11 rounded-2xl border border-blue-500/20 bg-blue-500/10" />
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-300">
+                <Lock size={20} />
+              </div>
               <h3 className="text-xl font-semibold">Private Member Access</h3>
               <p className="mt-3 text-sm text-slate-400">
                 Protected login, gated content, and a cleaner member experience.
@@ -61,7 +57,9 @@ export default function HomePage() {
             </div>
 
             <div className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-6 text-left shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-              <div className="mb-4 h-11 w-11 rounded-2xl border border-blue-500/20 bg-blue-500/10" />
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl border border-violet-500/20 bg-violet-500/10 text-violet-300">
+                <BookOpen size={20} />
+              </div>
               <h3 className="text-xl font-semibold">Guides and Links</h3>
               <p className="mt-3 text-sm text-slate-400">
                 Keep your most important resources and training all in one place.
@@ -69,10 +67,12 @@ export default function HomePage() {
             </div>
 
             <div className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-6 text-left shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-              <div className="mb-4 h-11 w-11 rounded-2xl border border-blue-500/20 bg-blue-500/10" />
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-300">
+                <TrendingUp size={20} />
+              </div>
               <h3 className="text-xl font-semibold">Built to Expand</h3>
               <p className="mt-3 text-sm text-slate-400">
-                Ready for Pro tools, SKU systems, trackers, and more later.
+                Pro tools, SKU systems, trackers, and more — all in one place as you grow.
               </p>
             </div>
           </div>

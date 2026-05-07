@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Lock, BookOpen, Wrench } from "lucide-react";
+import { Lock, BookOpen, TrendingUp } from "lucide-react";
 
 const errorMessages: Record<string, { text: string; showPricing: boolean }> = {
   not_member: {
@@ -30,19 +30,19 @@ const featureCards = [
   {
     icon: Lock,
     title: "Private Access",
-    desc: "Secure member login.",
+    desc: "Secure login for members only.",
     iconClass: "border-blue-500/20 bg-blue-500/10 text-blue-300",
   },
   {
     icon: BookOpen,
-    title: "Guides",
-    desc: "Training in one place.",
+    title: "Guides & Links",
+    desc: "All your training and resources in one place.",
     iconClass: "border-violet-500/20 bg-violet-500/10 text-violet-300",
   },
   {
-    icon: Wrench,
-    title: "Tools",
-    desc: "Built to expand later.",
+    icon: TrendingUp,
+    title: "Tools & Trackers",
+    desc: "Pro tools to help you flip smarter and faster.",
     iconClass: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
   },
 ];
@@ -225,8 +225,7 @@ export default function LoginPage() {
               </h1>
 
               <p className="mt-6 text-lg text-slate-400">
-                Sign in to access your dashboard, guides, private links, and future
-                premium tools in one clean platform.
+                Your hub for reselling tools, guides, and exclusive member resources — all in one place.
               </p>
 
               <div className="mt-10 grid gap-4 sm:grid-cols-3">
