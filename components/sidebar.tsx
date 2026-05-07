@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   LayoutDashboard, BookOpen, Shield, LogOut, Boxes,
-  Receipt, Mail, Footprints, Menu, X, Lock, ShoppingBag, Calculator, Ticket, PoundSterling, Gamepad2,
+  Receipt, Mail, Menu, X, Lock, ShoppingBag, Calculator, PoundSterling, Gamepad2,
 } from "lucide-react";
 
 type SidebarProps = { role: string; email: string; };
@@ -24,7 +24,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { href: "/admin", label: "Admin", icon: Shield, adminOnly: true },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/vinted-bot", label: "Vinted Bot", icon: ShoppingBag, startsWith: true, premiumLocked: true, lockedHref: "/vinted-bot" },
+  { href: "/dashboard/vinted-bot", label: "Vinted Bot", icon: ShoppingBag, startsWith: true, premiumLocked: true, lockedHref: "/vinted-bot/pricing" },
   { href: "/dashboard/gmail-sync", label: "Gmail Sync", icon: Mail, startsWith: true, premiumLocked: true, lockedHref: "/upgrade" },
   { href: "/dashboard/inventory", label: "AIO Tracker", icon: Boxes, startsWith: true },
   { href: "/dashboard/expenses", label: "Expenses", icon: Receipt, startsWith: true },
@@ -44,7 +44,7 @@ function SidebarContent({ role, email, pathname, onNavigate }: { role: string; e
   const baseItem = "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition";
   const activeItem = "border border-white/10 bg-white/10 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)]";
   const inactiveItem = "text-slate-300 hover:bg-white/5 hover:text-white";
-  const lockedItem = "text-slate-500 cursor-pointer hover:bg-white/5";
+  const lockedItem = "text-slate-300 cursor-pointer hover:bg-white/5 hover:text-white";
   const isUnlocked = role === "premium" || role === "admin";
 
   const filteredItems = useMemo(() => navItems.filter((item) => !item.adminOnly || role === "admin"), [role]);
@@ -74,7 +74,7 @@ function SidebarContent({ role, email, pathname, onNavigate }: { role: string; e
           if (item.premiumLocked && !isUnlocked) {
             return (
               <Link key={item.href} href={item.lockedHref ?? "/upgrade"} onClick={onNavigate} className={`${baseItem} ${lockedItem}`}>
-                <Icon size={18} /><span className="flex-1">{item.label}</span><Lock size={13} className="text-slate-600" />
+                <Icon size={18} /><span className="flex-1">{item.label}</span><Lock size={13} className="text-slate-500" />
               </Link>
             );
           }
