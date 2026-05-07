@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   Package, CheckSquare, Coins, PoundSterling, TrendingUp, Lock,
-  LayoutDashboard, ShoppingCart, Tag, Receipt, Boxes, FileSpreadsheet, Square, CheckSquare2,
+  LayoutDashboard, ShoppingCart, Tag, Receipt, Boxes, FileSpreadsheet, Square, CheckSquare2, ShoppingBag,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import AddItemModal from "@/components/inventory/AddItemModal";
@@ -16,6 +16,7 @@ import EbayTab from "@/components/inventory/EbayTab";
 import AmazonTab from "@/components/inventory/AmazonTab";
 import VintedTab from "@/components/inventory/VintedTab";
 import ReceiptHubTab from "@/components/inventory/ReceiptHubTab";
+import OtherSalesTab from "@/components/inventory/OtherSalesTab";
 import SalesCardModal from "@/components/inventory/SalesCardModal";
 import {
   InventoryItem, InventorySale, calculateProfit, calculateROI,
@@ -26,7 +27,7 @@ import {
 const supabase = createClient();
 type FilterType = "all" | "in_stock" | "sold";
 type SaleWithBuyPrice = InventorySale & { buy_price_per_unit: number };
-type TabType = "overview" | "inventory" | "ebay" | "amazon" | "vinted" | "receipts";
+type TabType = "overview" | "inventory" | "ebay" | "amazon" | "vinted" | "receipts" | "other";
 
 export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -120,7 +121,7 @@ export default function InventoryClient({ isPremium }: { isPremium: boolean }) {
     }).filter((s): s is SaleWithBuyPrice => s !== null);
   }, [items, sales]);
 
-const stats = useMemo(() => {
+  const stats = useMemo(() => {
     const inv = getInventoryStats(items);
     const sum = getSalesSummary(salesWithBuyPrice);
     const totalUnitsSold = items.reduce((acc, i) => acc + Number(i.quantity_sold ?? 0), 0);
@@ -146,13 +147,13 @@ const stats = useMemo(() => {
     return items.filter((i) => Number(i.quantity_remaining) === 0);
   }, [items, activeFilter]);
 
-const statCards = [
-  { title: "In Stock", value: String(stats.inStockCount), icon: Package, iconClasses: "border-amber-500/20 bg-amber-500/10 text-amber-300" },
-  { title: "Units Sold", value: String(stats.soldCount), icon: CheckSquare, iconClasses: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" },
-  { title: "Capital Locked", value: `£${stats.capitalLocked.toFixed(2)}`, icon: Coins, iconClasses: "border-slate-500/20 bg-slate-500/10 text-slate-300" },
-  { title: "Total Profit", value: `£${stats.totalProfit.toFixed(2)}`, icon: PoundSterling, iconClasses: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" },
-  { title: "Avg ROI", value: `${stats.avgROI.toFixed(1)}%`, icon: TrendingUp, iconClasses: "border-cyan-500/20 bg-cyan-500/10 text-cyan-300" },
-];
+  const statCards = [
+    { title: "In Stock", value: String(stats.inStockCount), icon: Package, iconClasses: "border-amber-500/20 bg-amber-500/10 text-amber-300" },
+    { title: "Units Sold", value: String(stats.soldCount), icon: CheckSquare, iconClasses: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" },
+    { title: "Capital Locked", value: `£${stats.capitalLocked.toFixed(2)}`, icon: Coins, iconClasses: "border-slate-500/20 bg-slate-500/10 text-slate-300" },
+    { title: "Total Profit", value: `£${stats.totalProfit.toFixed(2)}`, icon: PoundSterling, iconClasses: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" },
+    { title: "Avg ROI", value: `${stats.avgROI.toFixed(1)}%`, icon: TrendingUp, iconClasses: "border-cyan-500/20 bg-cyan-500/10 text-cyan-300" },
+  ];
 
   function handleOpenSoldModal(item: InventoryItem) { setSelectedItem(item); setShowSoldModal(true); }
   function handleCloseSoldModal() { setSelectedItem(null); setShowSoldModal(false); }
@@ -265,6 +266,7 @@ const statCards = [
     { id: "amazon" as TabType, label: "Amazon", icon: Package, premiumOnly: true },
     { id: "vinted" as TabType, label: "Vinted", icon: Tag, premiumOnly: true },
     { id: "receipts" as TabType, label: "Receipt Hub", icon: Receipt, premiumOnly: true },
+    { id: "other" as TabType, label: "Other Sales", icon: ShoppingBag, premiumOnly: false },
   ];
 
   return (
@@ -475,9 +477,9 @@ const statCards = [
                     </thead>
                     <tbody>
                       {loading ? (
-                        <tr><td colSpan={16} className="px-4 py-10 text-center text-slate-400">Loading inventory...</td></tr>
+                        <tr><td colSpan={17} className="px-4 py-10 text-center text-slate-400">Loading inventory...</td></tr>
                       ) : filteredItems.length === 0 ? (
-                        <tr><td colSpan={16} className="px-4 py-10 text-center text-slate-400">
+                        <tr><td colSpan={17} className="px-4 py-10 text-center text-slate-400">
                           {activeFilter === "all" ? "No inventory items yet." : activeFilter === "in_stock" ? "No in stock items." : "No sold items."}
                         </td></tr>
                       ) : filteredItems.map((item) => {
@@ -582,6 +584,7 @@ const statCards = [
           {activeTab === "amazon" && isPremium && <AmazonTab />}
           {activeTab === "vinted" && isPremium && <VintedTab />}
           {activeTab === "receipts" && isPremium && <ReceiptHubTab />}
+          {activeTab === "other" && <OtherSalesTab />}
         </section>
       </div>
 
@@ -590,6 +593,7 @@ const statCards = [
       <EditItemModal open={showEditModal} onClose={handleCloseEditModal} onSuccess={fetchData} item={selectedItem} />
       <ExportCsvModal open={showExportModal} onClose={() => setShowExportModal(false)} sales={salesWithBuyPrice} />
       <BulkImportModal open={showBulkImportModal} onClose={() => setShowBulkImportModal(false)} onSuccess={fetchData} />
+
       {/* Bulk Sell Modal */}
       {showBulkSellModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
@@ -602,7 +606,6 @@ const statCards = [
               <button onClick={() => setShowBulkSellModal(false)} className="text-slate-400 hover:text-white text-lg">✕</button>
             </div>
 
-            {/* Selected items preview */}
             <div className="mb-5 max-h-36 overflow-y-auto space-y-1.5 rounded-xl border border-white/10 bg-white/5 p-3">
               {filteredItems.filter(i => selectedItems.has(i.id)).map(item => (
                 <div key={item.id} className="flex items-center justify-between text-sm">

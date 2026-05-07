@@ -5,6 +5,12 @@ import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
 
+const PLATFORM_OPTIONS = [
+  { value: "all", label: "All Platforms", desc: "Shared cost (storage, subs, mileage, etc.)" },
+  { value: "ebay", label: "eBay", desc: "eBay-specific costs" },
+  { value: "vinted", label: "Vinted", desc: "Vinted-specific costs" },
+];
+
 export default function AddExpenseModal({
   open,
   onClose,
@@ -16,65 +22,41 @@ export default function AddExpenseModal({
 }) {
   const [expenseName, setExpenseName] = useState("");
   const [category, setCategory] = useState("Stock");
+  const [platform, setPlatform] = useState("all");
   const [amount, setAmount] = useState("");
-  const [expenseDate, setExpenseDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split("T")[0]);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-
     if (!expenseName.trim() || !amount || !expenseDate) {
       alert("Please fill in expense name, amount and date.");
       return;
     }
-
     try {
       setLoading(true);
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        console.error("Error getting user:", userError);
-        alert("Could not get current user.");
-        return;
-      }
-
-      if (!user) {
-        alert("No authenticated user found.");
-        return;
-      }
-
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) { alert("Could not get current user."); return; }
       const { error } = await supabase.from("expenses").insert({
         user_id: user.id,
         expense_name: expenseName.trim(),
         category,
+        platform,
         amount: Number(amount),
         expense_date: expenseDate,
         notes: notes.trim() || null,
       });
-
-      if (error) {
-        console.error("Insert error:", error);
-        alert("Failed to add expense.");
-        return;
-      }
-
+      if (error) { alert("Failed to add expense."); return; }
       setExpenseName("");
       setCategory("Stock");
+      setPlatform("all");
       setAmount("");
       setExpenseDate(new Date().toISOString().split("T")[0]);
       setNotes("");
-
       onSuccess();
       onClose();
-    } catch (error) {
-      console.error("Unexpected insert error:", error);
+    } catch {
       alert("Something went wrong.");
     } finally {
       setLoading(false);
@@ -88,19 +70,38 @@ export default function AddExpenseModal({
       <div className="w-full max-w-md rounded-[24px] border border-white/10 bg-[#081120] p-6 shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-xl font-semibold">Add Expense</h2>
-          <button
-            onClick={onClose}
-            className="rounded-lg px-2 py-1 text-slate-400 transition hover:bg-white/5 hover:text-white"
-          >
-            ✕
-          </button>
+          <button onClick={onClose} className="rounded-lg px-2 py-1 text-slate-400 transition hover:bg-white/5 hover:text-white">✕</button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Platform */}
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-300">
-              Expense Name
-            </label>
+            <label className="mb-2 block text-sm font-medium text-slate-300">Platform</label>
+            <div className="grid grid-cols-3 gap-2">
+              {PLATFORM_OPTIONS.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setPlatform(p.value)}
+                  className={`rounded-xl border px-3 py-2.5 text-left text-xs transition ${
+                    platform === p.value
+                      ? p.value === "ebay"
+                        ? "border-blue-500/30 bg-blue-500/15 text-blue-300"
+                        : p.value === "vinted"
+                        ? "border-teal-500/30 bg-teal-500/15 text-teal-300"
+                        : "border-slate-500/30 bg-slate-500/15 text-slate-300"
+                      : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
+                  }`}
+                >
+                  <span className="block font-semibold">{p.label}</span>
+                  <span className="mt-0.5 block text-[10px] opacity-70">{p.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-300">Expense Name</label>
             <input
               value={expenseName}
               onChange={(e) => setExpenseName(e.target.value)}
@@ -111,9 +112,7 @@ export default function AddExpenseModal({
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-300">
-              Category
-            </label>
+            <label className="mb-2 block text-sm font-medium text-slate-300">Category</label>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
@@ -131,13 +130,9 @@ export default function AddExpenseModal({
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-300">
-              Amount
-            </label>
+            <label className="mb-2 block text-sm font-medium text-slate-300">Amount</label>
             <input
-              type="number"
-              step="0.01"
-              value={amount}
+              type="number" step="0.01" value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
               className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none"
@@ -146,12 +141,9 @@ export default function AddExpenseModal({
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-300">
-              Expense Date
-            </label>
+            <label className="mb-2 block text-sm font-medium text-slate-300">Expense Date</label>
             <input
-              type="date"
-              value={expenseDate}
+              type="date" value={expenseDate}
               onChange={(e) => setExpenseDate(e.target.value)}
               className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none"
               required
@@ -159,9 +151,7 @@ export default function AddExpenseModal({
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-300">
-              Notes
-            </label>
+            <label className="mb-2 block text-sm font-medium text-slate-300">Notes</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -172,19 +162,12 @@ export default function AddExpenseModal({
           </div>
 
           <div className="flex gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 rounded-xl bg-emerald-500 py-3 font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
-            >
+            <button type="submit" disabled={loading}
+              className="flex-1 rounded-xl bg-emerald-500 py-3 font-semibold text-black transition hover:opacity-90 disabled:opacity-50">
               {loading ? "Adding..." : "Add Expense"}
             </button>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded-xl border border-white/10 py-3 text-white transition hover:bg-white/5"
-            >
+            <button type="button" onClick={onClose}
+              className="flex-1 rounded-xl border border-white/10 py-3 text-white transition hover:bg-white/5">
               Cancel
             </button>
           </div>

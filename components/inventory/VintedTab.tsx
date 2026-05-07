@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   Tag, Plus, Trash2, RefreshCw, Unlink, CheckCircle,
-  AlertCircle, Eye, EyeOff, Save, Loader2, Link2, Package,
+  AlertCircle, Eye, EyeOff, Save, Loader2, Link2, Package, Receipt,
 } from "lucide-react";
 
 const supabase = createClient();
@@ -35,6 +35,7 @@ export default function VintedTab() {
   const [connectedUsername, setConnectedUsername] = useState<string>("");
   const [sales, setSales] = useState<VintedSale[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [vintedExpenses, setVintedExpenses] = useState(0);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
@@ -82,6 +83,17 @@ export default function VintedTab() {
     setInventoryItems((data || []) as InventoryItem[]);
   }, []);
 
+  const fetchExpenses = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from("expenses").select("amount, platform").eq("user_id", user.id);
+    const total = (data || [])
+      .filter((e: any) => e.platform === "vinted" || e.platform === "all" || !e.platform)
+      .reduce((sum: number, e: any) => sum + Number(e.amount), 0);
+    setVintedExpenses(total);
+  }, []);
+
   const checkConnection = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setStatus("disconnected"); return; }
@@ -89,9 +101,9 @@ export default function VintedTab() {
       .from("vinted_connections").select("vinted_user_id")
       .eq("user_id", user.id).single();
     setStatus(data ? "connected" : "disconnected");
-    if (data) { fetchSales(); fetchInventory(); }
+    if (data) { fetchSales(); fetchInventory(); fetchExpenses(); }
     else setLoading(false);
-  }, [fetchSales, fetchInventory]);
+  }, [fetchSales, fetchInventory, fetchExpenses]);
 
   useEffect(() => { checkConnection(); }, [checkConnection]);
 
@@ -100,16 +112,13 @@ export default function VintedTab() {
     setConnecting(true); setConnectError("");
     try {
       const res = await fetch("/api/vinted/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accessToken: accessToken.trim(), refreshToken: refreshToken.trim() }),
       });
       const data = await res.json();
       if (!res.ok) { setConnectError(data.error || "Failed to connect."); return; }
       setConnectedUsername(data.username || "");
-      setShowConnectForm(false);
-      setAccessToken("");
-      setRefreshToken("");
+      setShowConnectForm(false); setAccessToken(""); setRefreshToken("");
       checkConnection();
     } catch { setConnectError("Something went wrong. Please try again."); }
     finally { setConnecting(false); }
@@ -120,12 +129,8 @@ export default function VintedTab() {
     try {
       const res = await fetch("/api/vinted/sync", { method: "POST" });
       const data = await res.json();
-      if (res.ok) {
-        setSyncResult(`✅ ${data.message}`);
-        fetchSales(); fetchInventory();
-      } else {
-        setSyncResult(`❌ ${data.error || "Sync failed."}`);
-      }
+      if (res.ok) { setSyncResult(`✅ ${data.message}`); fetchSales(); fetchInventory(); }
+      else setSyncResult(`❌ ${data.error || "Sync failed."}`);
     } catch { setSyncResult("❌ Sync failed. Please try again."); }
     finally { setSyncing(false); }
   }
@@ -134,8 +139,7 @@ export default function VintedTab() {
     if (!window.confirm("Disconnect your Vinted account? Your synced sales history will be kept.")) return;
     setDisconnecting(true);
     await fetch("/api/vinted/disconnect", { method: "POST" });
-    setStatus("disconnected");
-    setDisconnecting(false);
+    setStatus("disconnected"); setDisconnecting(false);
   }
 
   async function handleManualMatch(sale: VintedSale) {
@@ -146,10 +150,8 @@ export default function VintedTab() {
     if (!user) { setMatching(null); return; }
     const invItem = inventoryItems.find(i => i.id === inventoryId);
     if (!invItem) { setMatching(null); return; }
-
     const newRemaining = Math.max(0, Number(invItem.quantity_remaining) - 1);
     const soldDateStr = new Date(sale.sold_date).toISOString().split("T")[0];
-
     await supabase.from("inventory_sales").insert({
       user_id: user.id, inventory_item_id: invItem.id, item_name: invItem.item_name,
       quantity_sold: 1, sold_price: Number(sale.sale_price),
@@ -163,8 +165,7 @@ export default function VintedTab() {
     await supabase.from("vinted_sales").update({
       matched_inventory_id: inventoryId, auto_matched: false,
     }).eq("id", sale.id);
-
-    setSelectedMatch(prev => { const n = {...prev}; delete n[sale.id]; return n; });
+    setSelectedMatch(prev => { const n = { ...prev }; delete n[sale.id]; return n; });
     setSyncResult(`✅ Matched "${sale.item_title}" → "${invItem.item_name}"`);
     fetchSales(); fetchInventory();
     setMatching(null);
@@ -173,8 +174,7 @@ export default function VintedTab() {
   async function handleDelete(id: string) {
     setDeleting(id);
     await supabase.from("vinted_sales").delete().eq("id", id);
-    setDeleting(null);
-    fetchSales();
+    setDeleting(null); fetchSales();
   }
 
   async function handleAddSale(e: React.FormEvent) {
@@ -183,14 +183,12 @@ export default function VintedTab() {
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
-
     let matchedId: string | null = null;
     const titleLower = title.toLowerCase();
     const match = inventoryItems.find(item => {
       const name = (item.item_name || "").toLowerCase();
       return titleLower.includes(name) || name.includes(titleLower);
     });
-
     if (match && Number(match.quantity_remaining) > 0) {
       matchedId = match.id;
       const newRemaining = Math.max(0, Number(match.quantity_remaining) - Number(qty));
@@ -205,26 +203,25 @@ export default function VintedTab() {
         sold_price: Number(price), sold_date: soldDate,
       }).eq("id", match.id);
     }
-
     await supabase.from("vinted_sales").insert({
       user_id: user.id, item_title: title.trim(),
       quantity_sold: Number(qty), sale_price: Number(price),
       fees: Number(fees), sold_date: soldDate,
       notes: notes.trim() || null, matched_inventory_id: matchedId,
     });
-
     setTitle(""); setQty("1"); setPrice(""); setFees("0");
     setSoldDate(new Date().toISOString().split("T")[0]); setNotes("");
     setShowForm(false); setSaving(false);
     fetchSales();
   }
 
+  const totalRevenue = sales.reduce((s, x) => s + Number(x.sale_price), 0);
   const totalProfit = sales.reduce((sum, s) => sum + Number(s.sale_price) - Number(s.fees), 0);
+  const afterExpenses = totalProfit - vintedExpenses;
   const unmatchedCount = sales.filter(s => !s.matched_inventory_id).length;
 
   const inputCls = "w-full rounded-xl border border-white/10 bg-[#030814] px-4 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-violet-400/40 transition";
 
-  // ── Disconnected state ─────────────────────────────────────────────────────
   if (status === "loading") {
     return (
       <div className="flex items-center justify-center py-16 text-slate-500 text-sm">
@@ -242,18 +239,14 @@ export default function VintedTab() {
               <Tag size={28} />
             </div>
             <h3 className="text-xl font-semibold text-white">No Vinted Account Connected</h3>
-            <p className="mt-2 max-w-sm text-sm text-slate-400">
-              Connect your Vinted account using your browser token to automatically sync sold items.
-            </p>
+            <p className="mt-2 max-w-sm text-sm text-slate-400">Connect your Vinted account using your browser token to automatically sync sold items.</p>
             <div className="mt-6 flex gap-3">
               <button onClick={() => setShowConnectForm(true)}
                 className="flex items-center gap-2 rounded-2xl bg-violet-600 px-6 py-3 text-sm font-semibold text-white hover:bg-violet-500 transition">
                 <Tag size={16} /> Connect Vinted Account
               </button>
             </div>
-            <p className="mt-4 text-xs text-slate-600">
-              See the AutoBuy Setup guide for how to find your browser token.
-            </p>
+            <p className="mt-4 text-xs text-slate-600">See the AutoBuy Setup guide for how to find your browser token.</p>
           </div>
         ) : (
           <div className="mx-auto max-w-lg rounded-[24px] border border-violet-500/15 bg-[#071021] p-6 space-y-5">
@@ -265,7 +258,6 @@ export default function VintedTab() {
               <button onClick={() => { setShowConnectForm(false); setConnectError(""); }}
                 className="text-slate-500 hover:text-white transition text-lg">✕</button>
             </div>
-
             <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-1.5 text-xs text-slate-400">
               <p className="font-medium text-slate-300 mb-2">How to get your token:</p>
               <p>1. Open <span className="text-violet-400">vinted.co.uk</span> in your browser and sign in</p>
@@ -273,53 +265,36 @@ export default function VintedTab() {
               <p>3. Expand <strong className="text-white">Cookies</strong> → click the Vinted domain</p>
               <p>4. Find <strong className="text-white">access_token</strong> — copy and paste below</p>
               <p>5. Also copy <strong className="text-white">refresh_token</strong> for auto-renewal (recommended)</p>
-              <p className="mt-2 text-slate-600">Full guide in AutoBuy Setup → Getting your Vinted token</p>
             </div>
-
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Access Token</label>
               <div className="relative">
-                <input
-                  type={showToken ? "text" : "password"}
-                  value={accessToken}
+                <input type={showToken ? "text" : "password"} value={accessToken}
                   onChange={e => setAccessToken(e.target.value)}
-                  placeholder="Paste your Vinted access token here"
-                  className={`${inputCls} pr-10`}
-                />
+                  placeholder="Paste your Vinted access token here" className={`${inputCls} pr-10`} />
                 <button onClick={() => setShowToken(!showToken)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400">
                   {showToken ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
-              <p className="mt-1.5 text-xs text-slate-600">Your token is stored securely and only visible to you.</p>
             </div>
-
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                Refresh Token <span className="text-slate-600">(optional but recommended — prevents expiry)</span>
+                Refresh Token <span className="text-slate-600">(optional but recommended)</span>
               </label>
               <div className="relative">
-                <input
-                  type={showRefreshToken ? "text" : "password"}
-                  value={refreshToken}
+                <input type={showRefreshToken ? "text" : "password"} value={refreshToken}
                   onChange={e => setRefreshToken(e.target.value)}
-                  placeholder="Paste your Vinted refresh_token here (optional)"
-                  className={`${inputCls} pr-10`}
-                />
+                  placeholder="Paste your Vinted refresh_token here (optional)" className={`${inputCls} pr-10`} />
                 <button onClick={() => setShowRefreshToken(!showRefreshToken)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400">
                   {showRefreshToken ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
-              <p className="mt-1.5 text-xs text-slate-600">Find <strong className="text-slate-400">refresh_token</strong> in the same Cookies panel. This allows auto-renewal so you rarely need to reconnect.</p>
             </div>
-
             {connectError && (
-              <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                {connectError}
-              </div>
+              <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">{connectError}</div>
             )}
-
             <div className="flex gap-3">
               <button onClick={handleConnect} disabled={connecting}
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white hover:bg-violet-500 transition disabled:opacity-50">
@@ -332,28 +307,38 @@ export default function VintedTab() {
             </div>
           </div>
         )}
-
-        {/* Still show manual sales table when disconnected */}
         {sales.length > 0 && <ManualSalesSection sales={sales} loading={loading} onDelete={handleDelete} deleting={deleting} />}
       </div>
     );
   }
 
-  // ── Connected state ────────────────────────────────────────────────────────
+  // Connected state
   return (
     <div className="space-y-5">
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+
+      {/* Stats — now 4 cards including After Expenses */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
-          { label: "Total Sales", value: String(sales.length) },
-          { label: "Total Revenue", value: `£${sales.reduce((s, x) => s + Number(x.sale_price), 0).toFixed(2)}` },
-          { label: "Net Profit", value: `£${totalProfit.toFixed(2)}` },
+          { label: "Total Sales", value: String(sales.length), color: "border-violet-500/15" },
+          { label: "Total Revenue", value: `£${totalRevenue.toFixed(2)}`, color: "border-violet-500/15" },
+          { label: "Net Profit", value: `£${totalProfit.toFixed(2)}`, color: "border-emerald-500/15" },
         ].map(s => (
-          <div key={s.label} className="rounded-[20px] border border-violet-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-4">
+          <div key={s.label} className={`rounded-[20px] border ${s.color} bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-4`}>
             <p className="text-xs uppercase tracking-[0.12em] text-slate-500">{s.label}</p>
             <p className="mt-2 text-2xl font-semibold text-white">{s.value}</p>
           </div>
         ))}
+        {/* After Expenses card */}
+        <div className="rounded-[20px] border border-teal-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-4">
+          <div className="mb-1 flex items-center gap-1.5">
+            <Receipt size={12} className="text-teal-400" />
+            <p className="text-xs uppercase tracking-[0.12em] text-slate-500">After Expenses</p>
+          </div>
+          <p className={`mt-1 text-2xl font-semibold ${afterExpenses >= 0 ? "text-white" : "text-red-400"}`}>
+            £{afterExpenses.toFixed(2)}
+          </p>
+          <p className="mt-1 text-[10px] text-slate-600">Vinted + shared expenses deducted</p>
+        </div>
       </div>
 
       {/* Connected header */}
@@ -383,16 +368,11 @@ export default function VintedTab() {
       </div>
 
       {syncResult && (
-        <div className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm ${
-          syncResult.startsWith("✅")
-            ? "border-emerald-500/15 bg-emerald-500/10 text-emerald-300"
-            : "border-red-500/20 bg-red-500/10 text-red-300"
-        }`}>
+        <div className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm ${syncResult.startsWith("✅") ? "border-emerald-500/15 bg-emerald-500/10 text-emerald-300" : "border-red-500/20 bg-red-500/10 text-red-300"}`}>
           <AlertCircle size={14} /> {syncResult}
         </div>
       )}
 
-      {/* Unmatched callout */}
       {unmatchedCount > 0 && (
         <div className="flex items-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
           <Link2 size={14} className="flex-shrink-0" />
@@ -410,13 +390,11 @@ export default function VintedTab() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label className="mb-1.5 block text-xs font-medium text-slate-400">Item Title</label>
-              <input value={title} onChange={e => setTitle(e.target.value)}
-                placeholder="Item name" className={inputCls} required />
+              <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Item name" className={inputCls} required />
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-400">Sale Price (£)</label>
-              <input type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)}
-                placeholder="0.00" className={inputCls} required />
+              <input type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" className={inputCls} required />
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-400">Vinted Fees (£)</label>
@@ -476,9 +454,7 @@ export default function VintedTab() {
                 </td></tr>
               ) : sales.map(sale => (
                 <tr key={sale.id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                  <td className="px-4 py-3 font-medium text-white max-w-[220px] truncate" title={sale.item_title}>
-                    {sale.item_title}
-                  </td>
+                  <td className="px-4 py-3 font-medium text-white max-w-[220px] truncate" title={sale.item_title}>{sale.item_title}</td>
                   <td className="px-4 py-3 text-slate-300">{sale.quantity_sold}</td>
                   <td className="px-4 py-3 text-emerald-400 font-medium">£{Number(sale.sale_price).toFixed(2)}</td>
                   <td className="px-4 py-3 text-slate-300">£{Number(sale.fees).toFixed(2)}</td>
@@ -490,25 +466,18 @@ export default function VintedTab() {
                       </span>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <select
-                          value={selectedMatch[sale.id] ?? ""}
+                        <select value={selectedMatch[sale.id] ?? ""}
                           onChange={e => setSelectedMatch(prev => ({ ...prev, [sale.id]: e.target.value }))}
-                          className="rounded-xl border border-white/10 bg-[#0d1829] px-2 py-1.5 text-xs text-white outline-none max-w-[160px]"
-                        >
+                          className="rounded-xl border border-white/10 bg-[#0d1829] px-2 py-1.5 text-xs text-white outline-none max-w-[160px]">
                           <option value="">Select item...</option>
                           {inventoryItems.map(item => (
-                            <option key={item.id} value={item.id}>
-                              {item.item_name} ({item.quantity_remaining} left)
-                            </option>
+                            <option key={item.id} value={item.id}>{item.item_name} ({item.quantity_remaining} left)</option>
                           ))}
                         </select>
-                        <button
-                          onClick={() => handleManualMatch(sale)}
+                        <button onClick={() => handleManualMatch(sale)}
                           disabled={!selectedMatch[sale.id] || matching === sale.id}
-                          className="flex items-center gap-1 rounded-xl border border-violet-500/20 bg-violet-500/10 px-2.5 py-1.5 text-xs font-medium text-violet-300 hover:bg-violet-500/20 disabled:opacity-40 transition"
-                        >
-                          <Link2 size={11} />
-                          {matching === sale.id ? "..." : "Match"}
+                          className="flex items-center gap-1 rounded-xl border border-violet-500/20 bg-violet-500/10 px-2.5 py-1.5 text-xs font-medium text-violet-300 hover:bg-violet-500/20 disabled:opacity-40 transition">
+                          <Link2 size={11} />{matching === sale.id ? "..." : "Match"}
                         </button>
                       </div>
                     )}
@@ -529,7 +498,6 @@ export default function VintedTab() {
   );
 }
 
-// ── Simple sales table for disconnected state ──────────────────────────────
 function ManualSalesSection({ sales, loading, onDelete, deleting }: {
   sales: VintedSale[]; loading: boolean;
   onDelete: (id: string) => void; deleting: string | null;
