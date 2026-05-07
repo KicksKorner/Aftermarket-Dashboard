@@ -2,24 +2,54 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Lock, BookOpen, Wrench } from "lucide-react";
 
+const errorMessages: Record<string, { text: string; showPricing: boolean }> = {
+  not_member: {
+    text: "Your Discord account is not a member of the Aftermarket Arbitrage server. You must be an active member to access the dashboard.",
+    showPricing: true,
+  },
+  no_token: {
+    text: "Discord verification failed — we couldn't confirm your membership. Please try again.",
+    showPricing: false,
+  },
+  discord_check_failed: {
+    text: "We couldn't verify your Discord membership. Please try again or contact support.",
+    showPricing: false,
+  },
+  auth: {
+    text: "Authentication failed. Please try again.",
+    showPricing: false,
+  },
+};
+
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [showPricing, setShowPricing] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const errorKey = searchParams.get("error");
+    if (errorKey && errorMessages[errorKey]) {
+      setMessage(errorMessages[errorKey].text);
+      setShowPricing(errorMessages[errorKey].showPricing);
+    }
+  }, [searchParams]);
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setMessage("");
+    setShowPricing(false);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       setMessage(error.message);
@@ -33,6 +63,7 @@ export default function LoginPage() {
   async function handleSignup() {
     setLoading(true);
     setMessage("");
+    setShowPricing(false);
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) {
       setMessage(error.message);
@@ -45,11 +76,13 @@ export default function LoginPage() {
 
   async function handleDiscordLogin() {
     setLoading(true);
+    setMessage("");
+    setShowPricing(false);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "discord",
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
-        scopes: "identify email",
+        scopes: "identify email guilds.members.read",
       },
     });
     if (error) {
@@ -211,9 +244,19 @@ export default function LoginPage() {
             </button>
 
             {message && (
-              <p className="mt-5 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
-                {message}
-              </p>
+              <div className="mt-5 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-4 text-sm text-red-300">
+                <p>{message}</p>
+                {showPricing && (
+                  <a
+                    href="https://aftermarketarbitrage.com/pricing/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-blue-500"
+                  >
+                    View Membership Plans →
+                  </a>
+                )}
+              </div>
             )}
 
             <div className="mt-8 text-center text-sm text-slate-400">

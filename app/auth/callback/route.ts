@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
+const REQUIRED_GUILD_ID = "717030342611042334";
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
@@ -13,11 +15,38 @@ export async function GET(request: Request) {
     if (!error && data.user) {
       const user = data.user;
 
-      // Extract Discord identity data from OAuth metadata
       const discordIdentity = user.identities?.find(
         (id) => id.provider === "discord"
       );
 
+      const providerToken = data.session?.provider_token;
+
+      // ── Check Discord server membership ──────────────────────────────────
+      if (providerToken) {
+        try {
+          const memberCheck = await fetch(
+            `https://discord.com/api/users/@me/guilds/${REQUIRED_GUILD_ID}/member`,
+            {
+              headers: {
+                Authorization: `Bearer ${providerToken}`,
+              },
+            }
+          );
+
+          if (!memberCheck.ok) {
+            await supabase.auth.signOut();
+            return NextResponse.redirect(`${origin}/login?error=not_member`);
+          }
+        } catch {
+          await supabase.auth.signOut();
+          return NextResponse.redirect(`${origin}/login?error=discord_check_failed`);
+        }
+      } else {
+        await supabase.auth.signOut();
+        return NextResponse.redirect(`${origin}/login?error=no_token`);
+      }
+
+      // ── Member confirmed — upsert profile ────────────────────────────────
       if (discordIdentity?.identity_data) {
         const discordId = discordIdentity.identity_data.provider_id as string;
         const discordUsername =
@@ -26,7 +55,6 @@ export async function GET(request: Request) {
           (discordIdentity.identity_data.custom_claims?.global_name as string) ||
           null;
 
-        // Upsert profile with discord details — create row if first login
         await supabase.from("profiles").upsert(
           {
             id: user.id,
@@ -35,19 +63,12 @@ export async function GET(request: Request) {
             discord_username: discordUsername,
             role: "member",
           },
-          {
-            onConflict: "id",
-            ignoreDuplicates: false,
-          }
+          { onConflict: "id", ignoreDuplicates: false }
         );
 
-        // If profile already exists, just update the discord fields
         await supabase
           .from("profiles")
-          .update({
-            discord_id: discordId,
-            discord_username: discordUsername,
-          })
+          .update({ discord_id: discordId, discord_username: discordUsername })
           .eq("id", user.id);
       }
 
