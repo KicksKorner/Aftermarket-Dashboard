@@ -1,8 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import {
-  BookOpen, Video, Boxes, Receipt, Mail, Footprints, Lock, ShoppingBag,
-  Ticket, TrendingUp, PoundSterling, Package, AlertTriangle, Calculator,
+  BookOpen, Video, Boxes, Receipt, Mail, Lock, ShoppingBag,
+  Ticket, TrendingUp, Calculator,
 } from "lucide-react";
 import SourcingWidget from "@/components/SourcingWidget";
 import SellerAnalytics from "@/components/SellerAnalytics";
@@ -29,17 +29,11 @@ export default async function DashboardPage() {
   const isUnlocked = role === "premium" || role === "admin";
   const displayName = profile?.discord_username ?? user?.email?.split("@")[0] ?? "there";
 
-  // Fetch live widget data
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
 
-  const [
-    { data: recentSales },
-    { data: upcomingTickets },
-    { data: gmailPending },
-    { data: inventoryStats },
-  ] = await Promise.all([
-    // Recent inventory sales this month
+  // Only fetch what's still needed — recent sales and gmail badge
+  const [{ data: recentSales }, { data: gmailPending }] = await Promise.all([
     supabase
       .from("inventory_sales")
       .select("id, item_name, sold_price, sold_date")
@@ -48,67 +42,20 @@ export default async function DashboardPage() {
       .order("sold_date", { ascending: false })
       .limit(5),
 
-    // Upcoming ticket deadlines within 7 days
-    supabase
-      .from("tickets")
-      .select("id, event_name, transfer_deadline, event_date")
-      .eq("user_id", user!.id)
-      .eq("status", "holding")
-      .not("transfer_deadline", "is", null)
-      .order("transfer_deadline", { ascending: true })
-      .limit(3),
-
-    // Gmail pending imports
     supabase
       .from("gmail_imports")
       .select("id")
       .eq("user_id", user!.id)
       .eq("status", "pending"),
-
-    // Inventory summary
-    supabase
-      .from("inventory_items")
-      .select("id, buy_price, quantity_remaining, status")
-      .eq("user_id", user!.id),
   ]);
-
-  // Calculate monthly profit
-  const { data: monthlySales } = await supabase
-    .from("inventory_sales")
-    .select("sold_price, quantity_sold")
-    .eq("user_id", user!.id)
-    .gte("sold_date", monthStart);
-
-  const monthlyRevenue = (monthlySales ?? []).reduce(
-    (sum, s) => sum + Number(s.sold_price) * Number(s.quantity_sold), 0
-  );
-
-  // Capital locked
-  const capitalLocked = (inventoryStats ?? []).reduce(
-    (sum, i) => sum + Number(i.buy_price) * Number(i.quantity_remaining ?? 0), 0
-  );
-
-  // Upcoming ticket deadlines (within 7 days)
-  const urgentTickets = (upcomingTickets ?? []).filter((t) => {
-    const days = Math.ceil((new Date(t.transfer_deadline!).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    return days <= 7 && days >= 0;
-  });
 
   const gmailPendingCount = gmailPending?.length ?? 0;
 
   const featureCards = [
     {
-      title: "Sole Scan",
-      subtitle: "Scan SKUs and analyse trainer flips",
-      href: isUnlocked ? "/dashboard/sole-scan" : "/upgrade",
-      icon: Footprints,
-      iconClasses: "border-cyan-500/20 bg-cyan-500/10 text-cyan-300",
-      locked: !isUnlocked,
-    },
-    {
       title: "Vinted Bot",
       subtitle: "Real-time Vinted monitor and alerts",
-      href: "/vinted-bot",
+      href: "/vinted-bot/pricing",
       icon: ShoppingBag,
       iconClasses: "border-violet-500/20 bg-violet-500/10 text-violet-300",
       locked: !isUnlocked,
@@ -147,14 +94,6 @@ export default async function DashboardPage() {
       locked: false,
     },
     {
-      title: "Tickets",
-      subtitle: "Track ticket flips and deadlines",
-      href: "/dashboard/tickets",
-      icon: Ticket,
-      iconClasses: "border-amber-500/20 bg-amber-500/10 text-amber-300",
-      locked: false,
-    },
-    {
       title: "Guides Library",
       subtitle: "Training and walkthroughs",
       href: "/guides",
@@ -180,7 +119,7 @@ export default async function DashboardPage() {
           <h1 className="text-3xl font-semibold tracking-tight">
             Welcome back, {displayName} 👋
           </h1>
-          <p className="mt-1 text-sm text-slate-400">Here's what's happening with your reselling today.</p>
+          <p className="mt-1 text-sm text-slate-400">Here&apos;s what&apos;s happening with your reselling today.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -205,61 +144,10 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {/* Live widgets row */}
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {/* Monthly revenue */}
-        <div className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-5">
-          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-300">
-            <PoundSterling size={18} />
-          </div>
-          <p className="text-2xl font-semibold text-white">£{monthlyRevenue.toFixed(2)}</p>
-          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">Revenue this month</p>
-          <Link href="/dashboard/inventory" className="mt-3 block text-xs text-blue-400 hover:text-blue-300">
-            View inventory →
-          </Link>
-        </div>
-
-        {/* Capital locked */}
-        <div className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-5">
-          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-300">
-            <Package size={18} />
-          </div>
-          <p className="text-2xl font-semibold text-white">£{capitalLocked.toFixed(2)}</p>
-          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">Capital locked in stock</p>
-          <Link href="/dashboard/inventory" className="mt-3 block text-xs text-blue-400 hover:text-blue-300">
-            View stock →
-          </Link>
-        </div>
-
-        {/* Urgent tickets */}
-        <div className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-5">
-          <div className={`mb-4 flex h-11 w-11 items-center justify-center rounded-2xl border ${urgentTickets.length > 0 ? "border-red-500/20 bg-red-500/10 text-red-300" : "border-slate-500/20 bg-slate-500/10 text-slate-400"}`}>
-            <Ticket size={18} />
-          </div>
-          <p className="text-2xl font-semibold text-white">{urgentTickets.length}</p>
-          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">Ticket deadlines this week</p>
-          <Link href="/dashboard/tickets" className="mt-3 block text-xs text-blue-400 hover:text-blue-300">
-            View tickets →
-          </Link>
-        </div>
-
-        {/* Gmail queue */}
-        <div className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(5,10,26,0.92),rgba(3,8,20,0.96))] p-5">
-          <div className={`mb-4 flex h-11 w-11 items-center justify-center rounded-2xl border ${gmailPendingCount > 0 ? "border-blue-500/20 bg-blue-500/10 text-blue-300" : "border-slate-500/20 bg-slate-500/10 text-slate-400"}`}>
-            <Mail size={18} />
-          </div>
-          <p className="text-2xl font-semibold text-white">{gmailPendingCount}</p>
-          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">Gmail orders to review</p>
-          <Link href="/dashboard/gmail-sync" className="mt-3 block text-xs text-blue-400 hover:text-blue-300">
-            Review queue →
-          </Link>
-        </div>
-      </section>
-
       {/* Seller Analytics */}
       <SellerAnalytics />
 
-      {/* Recent activity + upcoming deadlines */}
+      {/* Recent activity + sourcing */}
       <section className="grid gap-4 xl:grid-cols-2">
         {/* Recent sales */}
         <div className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.72),rgba(5,10,26,0.88))] p-5">
