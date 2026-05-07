@@ -78,8 +78,10 @@ function isInactive(status: OrderStatus) {
 }
 
 function netProfit(sale: EbaySale): number {
+  // sale_price is per-unit, multiply by quantity for total revenue
+  const revenue = Number(sale.sale_price) * Number(sale.quantity_sold);
   return (
-    Number(sale.sale_price) -
+    revenue -
     Number(sale.platform_fees ?? 0) -
     Number(sale.postage_cost ?? 0) -
     Number(sale.refund_amount ?? 0)
@@ -267,7 +269,7 @@ export default function EbayTab() {
   // ── Derived stats ─────────────────────────────────────────────────────────
   const activeSales = sales.filter(s => !isInactive(s.order_status));
   const totalNetProfit = activeSales.reduce((sum, s) => sum + netProfit(s), 0);
-  const totalRevenue = activeSales.reduce((sum, s) => sum + Number(s.sale_price), 0);
+  const totalRevenue = activeSales.reduce((sum, s) => sum + Number(s.sale_price) * Number(s.quantity_sold), 0);
   const totalFees = activeSales.reduce((sum, s) => sum + Number(s.platform_fees ?? 0) + Number(s.postage_cost ?? 0), 0);
   const returnSales = sales.filter(s => s.return_reason || s.return_status || s.refund_amount);
   const openCases = sales.filter(s => s.has_open_case);
