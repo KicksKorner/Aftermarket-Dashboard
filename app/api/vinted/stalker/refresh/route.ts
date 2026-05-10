@@ -4,18 +4,19 @@ import { NextRequest, NextResponse } from "next/server";
 const APIFY_API_KEY = process.env.APIFY_API_KEY!;
 
 // saswave/vinted-product-item-profile-scraper
-// Supports profile URLs directly - pass the member URL and it returns all their items
+// Input schema: { url: string, feature: "products"|"profile"|etc, max_page: number }
 const ACTOR_ID = "saswave~vinted-product-item-profile-scraper";
 
-async function scrapeVintedProfile(profileUrl: string): Promise<any[]> {
+async function scrapeVintedProfile(vintedUserId: string): Promise<any[]> {
   const runUrl = `https://api.apify.com/v2/acts/${ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_API_KEY}&timeout=120&memory=512`;
 
   const input = {
-    startUrls: [{ url: profileUrl }],
-    maxItems: 500,
+    url: `https://www.vinted.co.uk/member/${vintedUserId}`,
+    feature: "products",
+    max_page: 0,
   };
 
-  console.log(`Apify saswave: scraping ${profileUrl}`);
+  console.log(`Apify saswave: scraping member ${vintedUserId}`);
 
   const res = await fetch(runUrl, {
     method: "POST",
@@ -23,33 +24,36 @@ async function scrapeVintedProfile(profileUrl: string): Promise<any[]> {
     body: JSON.stringify(input),
   });
 
-  console.log(`Apify saswave response: ${res.status}`);
+  console.log(`Apify saswave status: ${res.status}`);
 
   if (!res.ok) {
     const err = await res.text();
-    console.error("Apify error body:", err.substring(0, 500));
+    console.error("Apify error:", err.substring(0, 500));
     throw new Error(`Apify actor failed with status ${res.status}`);
   }
 
   const items = await res.json();
-  console.log(`Apify saswave returned ${Array.isArray(items) ? items.length : "non-array"} items`);
+  console.log(`Apify saswave returned ${Array.isArray(items) ? items.length : "?"} items`);
   if (Array.isArray(items) && items.length > 0) {
-    console.log("Sample item keys:", Object.keys(items[0]).join(", "));
+    console.log("First item keys:", Object.keys(items[0]).join(", "));
   }
   return Array.isArray(items) ? items : [];
 }
 
 function normaliseItem(item: any) {
-  // Try all possible field names from saswave actor
-  const priceRaw = item.price?.amount ?? item.price?.value ?? item.price ?? item.priceNumeric ?? "0";
+  const priceRaw =
+    item.price?.amount ?? item.price?.value ?? item.price ?? item.priceNumeric ?? "0";
   return {
     vintedItemId: String(item.id ?? item.itemId ?? item.item_id ?? ""),
     title: item.title ?? item.name ?? "Vinted Item",
     price: parseFloat(String(priceRaw)),
     currency: item.price?.currency_code ?? item.currency ?? "GBP",
-    category: item.catalog?.title ?? item.category?.title ?? item.categoryTitle ?? item.category ?? null,
-    brand: item.brand_title ?? item.brand?.title ?? item.brandTitle ?? item.brand ?? null,
-    size: item.size_title ?? item.size?.title ?? item.sizeTitle ?? item.size ?? null,
+    category:
+      item.catalog?.title ?? item.category?.title ?? item.categoryTitle ?? item.category ?? null,
+    brand:
+      item.brand_title ?? item.brand?.title ?? item.brandTitle ?? item.brand ?? null,
+    size:
+      item.size_title ?? item.size?.title ?? item.sizeTitle ?? item.size ?? null,
     views: item.view_count ?? item.viewCount ?? item.views ?? 0,
     favourites: item.favourite_count ?? item.favouriteCount ?? item.favourites ?? 0,
     imageUrl:
@@ -79,7 +83,9 @@ export async function POST(req: NextRequest) {
   if (!profileId) return NextResponse.json({ error: "profileId required" }, { status: 400 });
 
   if (!APIFY_API_KEY) {
-    return NextResponse.json({ error: "APIFY_API_KEY not set in environment variables." }, { status: 500 });
+    return NextResponse.json({
+      error: "APIFY_API_KEY not set in environment variables.",
+    }, { status: 500 });
   }
 
   const { data: trackedProfile } = await supabase
@@ -91,15 +97,13 @@ export async function POST(req: NextRequest) {
 
   if (!trackedProfile) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
 
-  const profileUrl = `https://www.vinted.co.uk/member/${trackedProfile.vinted_user_id}`;
-
   let rawItems: any[] = [];
   try {
-    rawItems = await scrapeVintedProfile(profileUrl);
+    rawItems = await scrapeVintedProfile(trackedProfile.vinted_user_id);
   } catch (err: any) {
     console.error("Apify scrape failed:", err.message);
     return NextResponse.json({
-      error: `Scraping failed: ${err.message}. Make sure you have saved the actor saswave/vinted-product-item-profile-scraper to your Apify account.`,
+      error: `Scraping failed: ${err.message}. Make sure you have saved saswave/vinted-product-item-profile-scraper to your Apify account at apify.com/saswave/vinted-product-item-profile-scraper`,
     }, { status: 500 });
   }
 
@@ -114,19 +118,18 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Filter to only items belonging to this seller
   const allItems = rawItems
     .map(normaliseItem)
     .filter(i => {
       if (!i.vintedItemId) return false;
-      // If we have seller info, verify it matches
+      // Filter to only this seller's items if we have seller info
       if (i.sellerUserId && i.sellerUserId !== "0" && i.sellerUserId !== "") {
         return i.sellerUserId === trackedProfile.vinted_user_id;
       }
       return true;
     });
 
-  console.log(`After filtering: ${allItems.length} items belong to user ${trackedProfile.vinted_user_id}`);
+  console.log(`After filtering: ${allItems.length} items for user ${trackedProfile.vinted_user_id}`);
 
   const { data: existingSnapshots } = await supabase
     .from("vinted_profile_snapshots")
@@ -185,7 +188,6 @@ export async function POST(req: NextRequest) {
       .in("id", toUpdateIds.slice(i, i + 50));
   }
 
-  // Detect sold items
   const soldIds: string[] = [];
   for (const [vintedItemId, snapshot] of existingMap.entries()) {
     if (!currentItemIds.has(vintedItemId) && snapshot.status === "active") {
