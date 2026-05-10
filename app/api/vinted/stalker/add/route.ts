@@ -13,61 +13,77 @@ function makeHeaders(token: string) {
   };
 }
 
+function extractNumericId(input: string): string | null {
+  // Handles all these formats:
+  // 241437643
+  // vinted.co.uk/member/241437643
+  // vinted.co.uk/member/241437643-belindawhite123
+  // https://www.vinted.co.uk/member/241437643-belindawhite123
+  const match = input.match(/\/member\/(\d+)/) || input.match(/^(\d+)$/);
+  return match ? match[1] : null;
+}
+
+function extractUsername(input: string): string | null {
+  // vinted.co.uk/member/241437643-belindawhite123 → belindawhite123
+  // vinted.co.uk/member/belindawhite123 → belindawhite123
+  // belindawhite123 → belindawhite123
+  const withId = input.match(/\/member\/\d+-([^/?#]+)/);
+  if (withId) return withId[1];
+  const withoutId = input.match(/\/member\/([^/?#\d][^/?#]*)/);
+  if (withoutId) return withoutId[1];
+  // Plain username (no slashes, not a number)
+  const plain = input.trim().replace(/^@/, "");
+  if (!plain.includes("/") && !/^\d+$/.test(plain)) return plain;
+  return null;
+}
+
 async function resolveVintedUser(input: string, token: string) {
   const headers = makeHeaders(token);
   const trimmed = input.trim().replace(/^@/, "");
 
-  // ── Strategy 1: numeric ID in URL e.g. vinted.co.uk/member/241437643 ──────
-  const numericId = trimmed.match(/\/member\/(\d+)/)?.[1] || (trimmed.match(/^\d+$/) ? trimmed : null);
+  // ── Strategy 1: extract numeric ID and fetch directly (most reliable) ─────
+  const numericId = extractNumericId(trimmed);
   if (numericId) {
+    console.log(`Vinted stalker: trying direct ID lookup for ${numericId}`);
     const res = await fetch(`https://www.vinted.co.uk/api/v2/users/${numericId}`, { headers });
+    console.log(`Vinted stalker: direct ID lookup status ${res.status}`);
     if (res.ok) {
       const data = await res.json();
       if (data.user) return data.user;
     }
   }
 
-  // ── Strategy 2: username in URL e.g. vinted.co.uk/member/belindawhite123 ──
-  const usernameFromUrl = trimmed.match(/\/member\/([^/?#\d][^/?#]*)/)?.[1];
-  const username = usernameFromUrl || trimmed;
+  // ── Strategy 2: username — search Vinted for the user ────────────────────
+  const username = extractUsername(trimmed);
+  if (username) {
+    console.log(`Vinted stalker: trying username search for ${username}`);
 
-  // Try direct user lookup by username via the member page endpoint
-  const directRes = await fetch(
-    `https://www.vinted.co.uk/api/v2/users?login=${encodeURIComponent(username)}&per_page=1`,
-    { headers }
-  );
-  if (directRes.ok) {
-    const data = await directRes.json();
-    const users = data.users || [];
-    const exact = users.find((u: any) => u.login?.toLowerCase() === username.toLowerCase());
-    if (exact) return exact;
-    if (users[0]) return users[0];
-  }
+    // Try login= param first
+    const loginRes = await fetch(
+      `https://www.vinted.co.uk/api/v2/users?login=${encodeURIComponent(username)}&per_page=5`,
+      { headers }
+    );
+    console.log(`Vinted stalker: login search status ${loginRes.status}`);
+    if (loginRes.ok) {
+      const data = await loginRes.json();
+      const users = data.users || [];
+      const exact = users.find((u: any) => u.login?.toLowerCase() === username.toLowerCase());
+      if (exact) return exact;
+    }
 
-  // ── Strategy 3: search query ──────────────────────────────────────────────
-  const searchRes = await fetch(
-    `https://www.vinted.co.uk/api/v2/users?query=${encodeURIComponent(username)}&per_page=10`,
-    { headers }
-  );
-  if (searchRes.ok) {
-    const data = await searchRes.json();
-    const users = data.users || [];
-    const exact = users.find((u: any) => u.login?.toLowerCase() === username.toLowerCase());
-    if (exact) return exact;
-    // If only one result, return it
-    if (users.length === 1) return users[0];
-  }
-
-  // ── Strategy 4: try fetching the member page directly ────────────────────
-  // Some Vinted accounts can be looked up via /api/v2/profiles/{username}
-  const profileRes = await fetch(
-    `https://www.vinted.co.uk/api/v2/profiles?username=${encodeURIComponent(username)}`,
-    { headers }
-  );
-  if (profileRes.ok) {
-    const data = await profileRes.json();
-    if (data.user) return data.user;
-    if (data.profile) return data.profile;
+    // Try query= param
+    const queryRes = await fetch(
+      `https://www.vinted.co.uk/api/v2/users?query=${encodeURIComponent(username)}&per_page=10`,
+      { headers }
+    );
+    console.log(`Vinted stalker: query search status ${queryRes.status}`);
+    if (queryRes.ok) {
+      const data = await queryRes.json();
+      const users = data.users || [];
+      const exact = users.find((u: any) => u.login?.toLowerCase() === username.toLowerCase());
+      if (exact) return exact;
+      if (users.length === 1) return users[0];
+    }
   }
 
   return null;
@@ -94,19 +110,22 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-  const vintedUser = await resolveVintedUser(input, conn.access_token);
+  const vintedUser = await resolveVintedUser(input.trim(), conn.access_token);
 
   if (!vintedUser) {
     return NextResponse.json({
-      error: "Could not find that Vinted user. Try pasting the full profile URL e.g. vinted.co.uk/member/belindawhite123",
+      error: "Could not find that Vinted user. Paste the full profile URL for best results e.g. https://www.vinted.co.uk/member/241437643-belindawhite123",
     }, { status: 404 });
   }
 
   const vintedUserId = String(vintedUser.id);
   const username = vintedUser.login || "";
   const displayName = vintedUser.real_name || vintedUser.login || "";
-  const avatarUrl = vintedUser.photo?.url || vintedUser.photo?.thumbnails?.[0]?.url || null;
-  const profileUrl = `https://www.vinted.co.uk/member/${username}`;
+  const avatarUrl =
+    vintedUser.photo?.thumbnails?.find((t: any) => t.type === "thumb150")?.url ||
+    vintedUser.photo?.url ||
+    null;
+  const profileUrl = vintedUser.profile_url || `https://www.vinted.co.uk/member/${vintedUserId}-${username}`;
   const totalItems = vintedUser.item_count || 0;
 
   // Check not already tracking
