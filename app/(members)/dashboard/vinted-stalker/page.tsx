@@ -287,7 +287,7 @@ export default function VintedStalkerPage() {
               <p className="mt-2 text-xs text-red-400">{addError}</p>
             )}
             <p className="mt-2 text-xs text-slate-600">
-              Accepts: <span className="text-slate-500">username</span>, <span className="text-slate-500">@username</span>, or <span className="text-slate-500">vinted.co.uk/member/username</span>
+              Paste the profile URL e.g. <span className="text-slate-500">vinted.co.uk/member/241437643</span> — click the numeric ID from the address bar on their profile page
             </p>
           </div>
         )}
