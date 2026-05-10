@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   LayoutDashboard, BookOpen, Shield, LogOut, Boxes,
-  Receipt, Mail, Menu, X, Lock, ShoppingBag, Calculator, PoundSterling, Gamepad2,
+  Receipt, Mail, Menu, X, Lock, ShoppingBag, Calculator, PoundSterling, Gamepad2, Users,
 } from "lucide-react";
 
 type SidebarProps = { role: string; email: string; };
@@ -31,6 +31,7 @@ const navItems: NavItem[] = [
   { href: "/dashboard/profit-calculator", label: "Profit Calculator", icon: Calculator, startsWith: true },
   { href: "/dashboard/vat-tracker", label: "VAT Tracker", icon: PoundSterling, startsWith: true },
   { href: "/dashboard/pokemon-checkouts", label: "Pokémon Orders", icon: Gamepad2, startsWith: true },
+  { href: "/dashboard/vinted-stalker", label: "Profile Stalker", icon: Users, startsWith: true, premiumLocked: true, lockedHref: "/vinted-bot/pricing" },
   { href: "/guides", label: "Guides", icon: BookOpen },
 ];
 
