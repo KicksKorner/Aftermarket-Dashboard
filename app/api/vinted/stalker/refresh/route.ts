@@ -3,20 +3,19 @@ import { NextRequest, NextResponse } from "next/server";
 
 const APIFY_API_KEY = process.env.APIFY_API_KEY!;
 
-// louisdeconinck/vinted-scraper supports user profile scraping
-const ACTOR_ID = "louisdeconinck~vinted-scraper";
+// saswave/vinted-product-item-profile-scraper
+// Supports profile URLs directly - pass the member URL and it returns all their items
+const ACTOR_ID = "saswave~vinted-product-item-profile-scraper";
 
 async function scrapeVintedProfile(profileUrl: string): Promise<any[]> {
-  // Run the Apify actor synchronously and get results back
-  const runUrl = `https://api.apify.com/v2/acts/${ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_API_KEY}&timeout=60&memory=256`;
+  const runUrl = `https://api.apify.com/v2/acts/${ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_API_KEY}&timeout=120&memory=512`;
 
   const input = {
     startUrls: [{ url: profileUrl }],
     maxItems: 500,
-    country: "UK",
   };
 
-  console.log(`Apify: scraping ${profileUrl}`);
+  console.log(`Apify saswave: scraping ${profileUrl}`);
 
   const res = await fetch(runUrl, {
     method: "POST",
@@ -24,33 +23,50 @@ async function scrapeVintedProfile(profileUrl: string): Promise<any[]> {
     body: JSON.stringify(input),
   });
 
-  console.log(`Apify response status: ${res.status}`);
+  console.log(`Apify saswave response: ${res.status}`);
 
   if (!res.ok) {
     const err = await res.text();
-    console.error("Apify error:", err);
+    console.error("Apify error body:", err.substring(0, 500));
     throw new Error(`Apify actor failed with status ${res.status}`);
   }
 
   const items = await res.json();
-  console.log(`Apify returned ${items.length} items`);
+  console.log(`Apify saswave returned ${Array.isArray(items) ? items.length : "non-array"} items`);
+  if (Array.isArray(items) && items.length > 0) {
+    console.log("Sample item keys:", Object.keys(items[0]).join(", "));
+  }
   return Array.isArray(items) ? items : [];
 }
 
 function normaliseItem(item: any) {
-  // louisdeconinck/vinted-scraper output shape
+  // Try all possible field names from saswave actor
+  const priceRaw = item.price?.amount ?? item.price?.value ?? item.price ?? item.priceNumeric ?? "0";
   return {
-    vintedItemId: String(item.id || item.itemId || ""),
-    title: item.title || item.name || "Vinted Item",
-    price: parseFloat(item.price?.amount || item.price || item.priceNumeric || "0"),
-    currency: item.price?.currency_code || item.currency || "GBP",
-    category: item.category?.title || item.categoryTitle || item.category || null,
-    brand: item.brand?.title || item.brandTitle || item.brand || null,
-    size: item.size?.title || item.sizeTitle || item.size || null,
-    views: item.view_count || item.viewCount || item.views || 0,
-    favourites: item.favourite_count || item.favouriteCount || item.favourites || 0,
-    imageUrl: item.photos?.[0]?.url || item.imageUrl || item.photo?.url || item.image || null,
-    itemUrl: item.url || item.itemUrl || (item.id ? `https://www.vinted.co.uk/items/${item.id}` : null),
+    vintedItemId: String(item.id ?? item.itemId ?? item.item_id ?? ""),
+    title: item.title ?? item.name ?? "Vinted Item",
+    price: parseFloat(String(priceRaw)),
+    currency: item.price?.currency_code ?? item.currency ?? "GBP",
+    category: item.catalog?.title ?? item.category?.title ?? item.categoryTitle ?? item.category ?? null,
+    brand: item.brand_title ?? item.brand?.title ?? item.brandTitle ?? item.brand ?? null,
+    size: item.size_title ?? item.size?.title ?? item.sizeTitle ?? item.size ?? null,
+    views: item.view_count ?? item.viewCount ?? item.views ?? 0,
+    favourites: item.favourite_count ?? item.favouriteCount ?? item.favourites ?? 0,
+    imageUrl:
+      item.photos?.[0]?.url ??
+      item.photo?.url ??
+      item.image_url ??
+      item.imageUrl ??
+      item.thumbnail ??
+      null,
+    itemUrl:
+      item.url ??
+      item.itemUrl ??
+      item.item_url ??
+      (item.id ? `https://www.vinted.co.uk/items/${item.id}` : null),
+    sellerUserId: String(
+      item.user?.id ?? item.user_id ?? item.seller?.id ?? item.sellerId ?? ""
+    ),
   };
 }
 
@@ -63,10 +79,9 @@ export async function POST(req: NextRequest) {
   if (!profileId) return NextResponse.json({ error: "profileId required" }, { status: 400 });
 
   if (!APIFY_API_KEY) {
-    return NextResponse.json({ error: "Apify API key not configured. Add APIFY_API_KEY to your environment variables." }, { status: 500 });
+    return NextResponse.json({ error: "APIFY_API_KEY not set in environment variables." }, { status: 500 });
   }
 
-  // Get the tracked profile
   const { data: trackedProfile } = await supabase
     .from("vinted_tracked_profiles")
     .select("*")
@@ -76,18 +91,15 @@ export async function POST(req: NextRequest) {
 
   if (!trackedProfile) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
 
-  // Build the profile URL for scraping
-  const profileUrl = trackedProfile.profile_url ||
-    `https://www.vinted.co.uk/member/${trackedProfile.vinted_user_id}-${trackedProfile.username}`;
+  const profileUrl = `https://www.vinted.co.uk/member/${trackedProfile.vinted_user_id}`;
 
-  // Scrape via Apify
   let rawItems: any[] = [];
   try {
     rawItems = await scrapeVintedProfile(profileUrl);
   } catch (err: any) {
     console.error("Apify scrape failed:", err.message);
     return NextResponse.json({
-      error: `Scraping failed: ${err.message}. Check your APIFY_API_KEY is correct in Netlify env vars.`,
+      error: `Scraping failed: ${err.message}. Make sure you have saved the actor saswave/vinted-product-item-profile-scraper to your Apify account.`,
     }, { status: 500 });
   }
 
@@ -98,18 +110,24 @@ export async function POST(req: NextRequest) {
       updated: 0,
       soldDetected: 0,
       totalFetched: 0,
-      message: "No listings found for this profile. They may have no active items.",
+      message: "No listings found for this profile.",
     });
   }
 
-  // Normalise items
+  // Filter to only items belonging to this seller
   const allItems = rawItems
     .map(normaliseItem)
-    .filter(i => i.vintedItemId);
+    .filter(i => {
+      if (!i.vintedItemId) return false;
+      // If we have seller info, verify it matches
+      if (i.sellerUserId && i.sellerUserId !== "0" && i.sellerUserId !== "") {
+        return i.sellerUserId === trackedProfile.vinted_user_id;
+      }
+      return true;
+    });
 
-  console.log(`Normalised ${allItems.length} items for ${trackedProfile.username}`);
+  console.log(`After filtering: ${allItems.length} items belong to user ${trackedProfile.vinted_user_id}`);
 
-  // Get existing snapshots
   const { data: existingSnapshots } = await supabase
     .from("vinted_profile_snapshots")
     .select("id, vinted_item_id, status")
@@ -125,7 +143,6 @@ export async function POST(req: NextRequest) {
   let soldDetected = 0;
   let updated = 0;
 
-  // Process current listings — batch inserts for speed
   const toInsert: any[] = [];
   const toUpdateIds: string[] = [];
 
@@ -157,21 +174,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Batch insert new items
   if (toInsert.length > 0) {
     await supabase.from("vinted_profile_snapshots").insert(toInsert);
   }
 
-  // Batch update existing — update in chunks of 50
   for (let i = 0; i < toUpdateIds.length; i += 50) {
-    const chunk = toUpdateIds.slice(i, i + 50);
     await supabase
       .from("vinted_profile_snapshots")
       .update({ last_seen_at: now, status: "active" })
-      .in("id", chunk);
+      .in("id", toUpdateIds.slice(i, i + 50));
   }
 
-  // Detect sold items — in DB but not in current scrape
+  // Detect sold items
   const soldIds: string[] = [];
   for (const [vintedItemId, snapshot] of existingMap.entries()) {
     if (!currentItemIds.has(vintedItemId) && snapshot.status === "active") {
@@ -187,7 +201,6 @@ export async function POST(req: NextRequest) {
       .in("id", soldIds);
   }
 
-  // Update profile metadata
   await supabase
     .from("vinted_tracked_profiles")
     .update({ last_checked_at: now, total_items: allItems.length })
