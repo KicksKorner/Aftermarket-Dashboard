@@ -1,135 +1,70 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 
-function makeHeaders(token: string) {
-  return {
-    Authorization: `Bearer ${token}`,
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    Accept: "application/json, text/plain, */*",
-    "Accept-Language": "en-GB,en;q=0.9",
-    "X-Client-Id": "web",
-    Referer: "https://www.vinted.co.uk/",
-    Origin: "https://www.vinted.co.uk",
-  };
-}
+const APIFY_API_KEY = process.env.APIFY_API_KEY!;
+const ACTOR_ID = "louisdeconinck~vinted-scraper";
 
 function extractNumericId(input: string): string | null {
+  // /member/241437643 or /member/241437643-username
   const match = input.match(/\/member\/(\d+)/) || input.match(/^(\d+)$/);
   return match ? match[1] : null;
 }
 
 function extractUsername(input: string): string | null {
+  // /member/241437643-belindawhite123 → belindawhite123
   const withId = input.match(/\/member\/\d+-([^/?#]+)/);
   if (withId) return withId[1];
+  // /member/belindawhite123 → belindawhite123
   const withoutId = input.match(/\/member\/([^/?#\d][^/?#]*)/);
   if (withoutId) return withoutId[1];
+  // plain username
   const plain = input.trim().replace(/^@/, "");
   if (!plain.includes("/") && !/^\d+$/.test(plain)) return plain;
   return null;
 }
 
-async function tryRefreshToken(supabase: any, userId: string, refreshToken: string): Promise<string | null> {
-  try {
-    const res = await fetch("https://www.vinted.co.uk/oauth/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-        client_id: "android",
-      }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const newToken = data.access_token;
-    if (newToken) {
-      await supabase.from("vinted_connections").update({
-        access_token: newToken,
-        ...(data.refresh_token ? { refresh_token: data.refresh_token } : {}),
-      }).eq("user_id", userId);
-      return newToken;
-    }
-  } catch { return null; }
-  return null;
+function buildProfileUrl(input: string): string {
+  const trimmed = input.trim();
+  // Already a full URL
+  if (trimmed.startsWith("http")) return trimmed;
+  // Has /member/ path
+  if (trimmed.includes("/member/")) return `https://www.vinted.co.uk/${trimmed.replace(/^\//, "")}`;
+  // Numeric ID
+  const numId = extractNumericId(trimmed);
+  if (numId) return `https://www.vinted.co.uk/member/${numId}`;
+  // Username
+  const username = extractUsername(trimmed);
+  if (username) return `https://www.vinted.co.uk/member/${username}`;
+  return `https://www.vinted.co.uk/member/${trimmed}`;
 }
 
-async function getValidToken(supabase: any, userId: string): Promise<string | null> {
-  const { data: conn } = await supabase
-    .from("vinted_connections")
-    .select("access_token, refresh_token")
-    .eq("user_id", userId)
-    .single();
+async function scrapeProfileForUserInfo(profileUrl: string): Promise<any | null> {
+  // Run actor, get just 1 item to extract seller info
+  const runUrl = `https://api.apify.com/v2/acts/${ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_API_KEY}&timeout=60&memory=256`;
 
-  if (!conn?.access_token) return null;
+  const input = {
+    startUrls: [{ url: profileUrl }],
+    maxItems: 1,
+    country: "UK",
+  };
 
-  // Test if token is valid
-  const testRes = await fetch("https://www.vinted.co.uk/api/v2/users/current", {
-    headers: makeHeaders(conn.access_token),
+  console.log(`Apify add: resolving ${profileUrl}`);
+  const res = await fetch(runUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
   });
 
-  if (testRes.ok) return conn.access_token;
+  console.log(`Apify add response: ${res.status}`);
+  if (!res.ok) return null;
 
-  // Token expired — try refresh
-  if (conn.refresh_token) {
-    console.log("Vinted stalker: token expired, attempting refresh");
-    const refreshed = await tryRefreshToken(supabase, userId, conn.refresh_token);
-    if (refreshed) {
-      console.log("Vinted stalker: token refreshed successfully");
-      return refreshed;
-    }
-  }
+  const items = await res.json();
+  if (!Array.isArray(items) || !items.length) return null;
 
-  console.log("Vinted stalker: token invalid and refresh failed");
-  return null;
-}
-
-async function resolveVintedUser(input: string, token: string) {
-  const headers = makeHeaders(token);
-  const trimmed = input.trim().replace(/^@/, "");
-
-  // Strategy 1: numeric ID → direct fetch
-  const numericId = extractNumericId(trimmed);
-  if (numericId) {
-    console.log(`Vinted stalker: direct ID lookup for ${numericId}`);
-    const res = await fetch(`https://www.vinted.co.uk/api/v2/users/${numericId}`, { headers });
-    console.log(`Vinted stalker: direct ID status ${res.status}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.user) return data.user;
-    }
-  }
-
-  // Strategy 2: username search
-  const username = extractUsername(trimmed);
-  if (username) {
-    console.log(`Vinted stalker: username search for ${username}`);
-    const loginRes = await fetch(
-      `https://www.vinted.co.uk/api/v2/users?login=${encodeURIComponent(username)}&per_page=5`,
-      { headers }
-    );
-    console.log(`Vinted stalker: login search status ${loginRes.status}`);
-    if (loginRes.ok) {
-      const data = await loginRes.json();
-      const users = data.users || [];
-      const exact = users.find((u: any) => u.login?.toLowerCase() === username.toLowerCase());
-      if (exact) return exact;
-    }
-
-    const queryRes = await fetch(
-      `https://www.vinted.co.uk/api/v2/users?query=${encodeURIComponent(username)}&per_page=10`,
-      { headers }
-    );
-    console.log(`Vinted stalker: query search status ${queryRes.status}`);
-    if (queryRes.ok) {
-      const data = await queryRes.json();
-      const users = data.users || [];
-      const exact = users.find((u: any) => u.login?.toLowerCase() === username.toLowerCase());
-      if (exact) return exact;
-      if (users.length === 1) return users[0];
-    }
-  }
-
-  return null;
+  // Extract seller info from first item
+  const firstItem = items[0];
+  const seller = firstItem.seller || firstItem.user || firstItem.author || null;
+  return seller;
 }
 
 export async function POST(req: NextRequest) {
@@ -140,53 +75,89 @@ export async function POST(req: NextRequest) {
   const { input } = await req.json();
   if (!input?.trim()) return NextResponse.json({ error: "Username or URL required" }, { status: 400 });
 
-  // Get a valid (possibly refreshed) token
-  const token = await getValidToken(supabase, user.id);
-
-  if (!token) {
-    return NextResponse.json({
-      error: "Your Vinted token has expired. Please reconnect your Vinted account in AIO Tracker → Vinted tab with a fresh token.",
-    }, { status: 401 });
+  if (!APIFY_API_KEY) {
+    return NextResponse.json({ error: "Apify API key not configured." }, { status: 500 });
   }
 
-  const vintedUser = await resolveVintedUser(input.trim(), token);
+  const trimmed = input.trim().replace(/^@/, "");
+  const profileUrl = buildProfileUrl(trimmed);
+  const numericId = extractNumericId(trimmed);
+  const username = extractUsername(trimmed) || trimmed;
 
-  if (!vintedUser) {
-    return NextResponse.json({
-      error: "Could not find that Vinted user. Try the full profile URL e.g. https://www.vinted.co.uk/member/241437643-belindawhite123",
-    }, { status: 404 });
+  console.log(`Profile stalker add: input="${trimmed}" → url="${profileUrl}"`);
+
+  // Check not already tracking (by URL pattern match)
+  // We use the numeric ID if we have it, otherwise we'll get it after scraping
+  if (numericId) {
+    const { data: existing } = await supabase
+      .from("vinted_tracked_profiles")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("vinted_user_id", numericId)
+      .single();
+
+    if (existing) {
+      return NextResponse.json({ error: "You're already tracking this profile." }, { status: 409 });
+    }
   }
 
-  const vintedUserId = String(vintedUser.id);
-  const username = vintedUser.login || "";
-  const displayName = vintedUser.real_name || vintedUser.login || "";
-  const avatarUrl =
-    vintedUser.photo?.thumbnails?.find((t: any) => t.type === "thumb150")?.url ||
-    vintedUser.photo?.url ||
-    null;
-  const profileUrl = vintedUser.profile_url || `https://www.vinted.co.uk/member/${vintedUserId}-${username}`;
-  const totalItems = vintedUser.item_count || 0;
+  // Try to get seller info from Apify scrape
+  let vintedUserId = numericId || "";
+  let resolvedUsername = username;
+  let displayName = username;
+  let avatarUrl: string | null = null;
+  let totalItems = 0;
 
-  // Check not already tracking
-  const { data: existing } = await supabase
-    .from("vinted_tracked_profiles")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("vinted_user_id", vintedUserId)
-    .single();
+  try {
+    const seller = await scrapeProfileForUserInfo(profileUrl);
+    if (seller) {
+      vintedUserId = String(seller.id || seller.userId || numericId || "");
+      resolvedUsername = seller.login || seller.username || username;
+      displayName = seller.real_name || seller.realName || resolvedUsername;
+      avatarUrl = seller.photo?.thumbnails?.find((t: any) => t.type === "thumb150")?.url
+        || seller.photo?.url || seller.avatar || null;
+      totalItems = seller.item_count || seller.itemCount || 0;
+    } else if (!vintedUserId && !resolvedUsername) {
+      return NextResponse.json({
+        error: "Could not find that Vinted profile. Check the URL or username and try again.",
+      }, { status: 404 });
+    }
+  } catch (err) {
+    console.error("Apify add scrape failed:", err);
+    // If scrape fails but we have enough info from the URL, continue anyway
+    if (!vintedUserId && !resolvedUsername) {
+      return NextResponse.json({
+        error: "Could not resolve that Vinted profile. Please use the full profile URL.",
+      }, { status: 404 });
+    }
+  }
 
-  if (existing) {
-    return NextResponse.json({ error: "You're already tracking this profile." }, { status: 409 });
+  const finalProfileUrl = vintedUserId
+    ? `https://www.vinted.co.uk/member/${vintedUserId}-${resolvedUsername}`
+    : profileUrl;
+
+  // Final duplicate check with resolved ID
+  if (vintedUserId) {
+    const { data: existing } = await supabase
+      .from("vinted_tracked_profiles")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("vinted_user_id", vintedUserId)
+      .single();
+
+    if (existing) {
+      return NextResponse.json({ error: "You're already tracking this profile." }, { status: 409 });
+    }
   }
 
   const { data: profile, error } = await supabase
     .from("vinted_tracked_profiles")
     .insert({
       user_id: user.id,
-      vinted_user_id: vintedUserId,
-      username,
+      vinted_user_id: vintedUserId || resolvedUsername,
+      username: resolvedUsername,
       display_name: displayName,
-      profile_url: profileUrl,
+      profile_url: finalProfileUrl,
       avatar_url: avatarUrl,
       total_items: totalItems,
     })
