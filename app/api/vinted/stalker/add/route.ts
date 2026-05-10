@@ -13,27 +13,64 @@ function makeHeaders(token: string) {
   };
 }
 
-// Resolve username or URL to a Vinted user object
 async function resolveVintedUser(input: string, token: string) {
-  // Extract username from URL if needed
-  let username = input.trim();
-  const urlMatch = username.match(/vinted\.co\.uk\/(?:member\/)?([^/?#]+)/i);
-  if (urlMatch) username = urlMatch[1];
-  // Remove leading @ if present
-  username = username.replace(/^@/, "");
+  const headers = makeHeaders(token);
+  const trimmed = input.trim().replace(/^@/, "");
 
-  const res = await fetch(
-    `https://www.vinted.co.uk/api/v2/users?query=${encodeURIComponent(username)}&per_page=5`,
-    { headers: makeHeaders(token) }
+  // ── Strategy 1: numeric ID in URL e.g. vinted.co.uk/member/241437643 ──────
+  const numericId = trimmed.match(/\/member\/(\d+)/)?.[1] || (trimmed.match(/^\d+$/) ? trimmed : null);
+  if (numericId) {
+    const res = await fetch(`https://www.vinted.co.uk/api/v2/users/${numericId}`, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.user) return data.user;
+    }
+  }
+
+  // ── Strategy 2: username in URL e.g. vinted.co.uk/member/belindawhite123 ──
+  const usernameFromUrl = trimmed.match(/\/member\/([^/?#\d][^/?#]*)/)?.[1];
+  const username = usernameFromUrl || trimmed;
+
+  // Try direct user lookup by username via the member page endpoint
+  const directRes = await fetch(
+    `https://www.vinted.co.uk/api/v2/users?login=${encodeURIComponent(username)}&per_page=1`,
+    { headers }
   );
-  if (!res.ok) return null;
-  const data = await res.json();
-  const users = data.users || [];
-  // Find exact match first, then fallback to first result
-  const exact = users.find((u: any) =>
-    u.login?.toLowerCase() === username.toLowerCase()
+  if (directRes.ok) {
+    const data = await directRes.json();
+    const users = data.users || [];
+    const exact = users.find((u: any) => u.login?.toLowerCase() === username.toLowerCase());
+    if (exact) return exact;
+    if (users[0]) return users[0];
+  }
+
+  // ── Strategy 3: search query ──────────────────────────────────────────────
+  const searchRes = await fetch(
+    `https://www.vinted.co.uk/api/v2/users?query=${encodeURIComponent(username)}&per_page=10`,
+    { headers }
   );
-  return exact || users[0] || null;
+  if (searchRes.ok) {
+    const data = await searchRes.json();
+    const users = data.users || [];
+    const exact = users.find((u: any) => u.login?.toLowerCase() === username.toLowerCase());
+    if (exact) return exact;
+    // If only one result, return it
+    if (users.length === 1) return users[0];
+  }
+
+  // ── Strategy 4: try fetching the member page directly ────────────────────
+  // Some Vinted accounts can be looked up via /api/v2/profiles/{username}
+  const profileRes = await fetch(
+    `https://www.vinted.co.uk/api/v2/profiles?username=${encodeURIComponent(username)}`,
+    { headers }
+  );
+  if (profileRes.ok) {
+    const data = await profileRes.json();
+    if (data.user) return data.user;
+    if (data.profile) return data.profile;
+  }
+
+  return null;
 }
 
 export async function POST(req: NextRequest) {
@@ -52,12 +89,17 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (!conn?.access_token) {
-    return NextResponse.json({ error: "No Vinted account connected. Connect your Vinted account first." }, { status: 400 });
+    return NextResponse.json({
+      error: "No Vinted account connected. Connect your Vinted account in AIO Tracker → Vinted tab first.",
+    }, { status: 400 });
   }
 
   const vintedUser = await resolveVintedUser(input, conn.access_token);
+
   if (!vintedUser) {
-    return NextResponse.json({ error: "Could not find that Vinted user. Check the username or URL and try again." }, { status: 404 });
+    return NextResponse.json({
+      error: "Could not find that Vinted user. Try pasting the full profile URL e.g. vinted.co.uk/member/belindawhite123",
+    }, { status: 404 });
   }
 
   const vintedUserId = String(vintedUser.id);
