@@ -14,26 +14,72 @@ function makeHeaders(token: string) {
 }
 
 function extractNumericId(input: string): string | null {
-  // Handles all these formats:
-  // 241437643
-  // vinted.co.uk/member/241437643
-  // vinted.co.uk/member/241437643-belindawhite123
-  // https://www.vinted.co.uk/member/241437643-belindawhite123
   const match = input.match(/\/member\/(\d+)/) || input.match(/^(\d+)$/);
   return match ? match[1] : null;
 }
 
 function extractUsername(input: string): string | null {
-  // vinted.co.uk/member/241437643-belindawhite123 → belindawhite123
-  // vinted.co.uk/member/belindawhite123 → belindawhite123
-  // belindawhite123 → belindawhite123
   const withId = input.match(/\/member\/\d+-([^/?#]+)/);
   if (withId) return withId[1];
   const withoutId = input.match(/\/member\/([^/?#\d][^/?#]*)/);
   if (withoutId) return withoutId[1];
-  // Plain username (no slashes, not a number)
   const plain = input.trim().replace(/^@/, "");
   if (!plain.includes("/") && !/^\d+$/.test(plain)) return plain;
+  return null;
+}
+
+async function tryRefreshToken(supabase: any, userId: string, refreshToken: string): Promise<string | null> {
+  try {
+    const res = await fetch("https://www.vinted.co.uk/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: "android",
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const newToken = data.access_token;
+    if (newToken) {
+      await supabase.from("vinted_connections").update({
+        access_token: newToken,
+        ...(data.refresh_token ? { refresh_token: data.refresh_token } : {}),
+      }).eq("user_id", userId);
+      return newToken;
+    }
+  } catch { return null; }
+  return null;
+}
+
+async function getValidToken(supabase: any, userId: string): Promise<string | null> {
+  const { data: conn } = await supabase
+    .from("vinted_connections")
+    .select("access_token, refresh_token")
+    .eq("user_id", userId)
+    .single();
+
+  if (!conn?.access_token) return null;
+
+  // Test if token is valid
+  const testRes = await fetch("https://www.vinted.co.uk/api/v2/users/current", {
+    headers: makeHeaders(conn.access_token),
+  });
+
+  if (testRes.ok) return conn.access_token;
+
+  // Token expired — try refresh
+  if (conn.refresh_token) {
+    console.log("Vinted stalker: token expired, attempting refresh");
+    const refreshed = await tryRefreshToken(supabase, userId, conn.refresh_token);
+    if (refreshed) {
+      console.log("Vinted stalker: token refreshed successfully");
+      return refreshed;
+    }
+  }
+
+  console.log("Vinted stalker: token invalid and refresh failed");
   return null;
 }
 
@@ -41,24 +87,22 @@ async function resolveVintedUser(input: string, token: string) {
   const headers = makeHeaders(token);
   const trimmed = input.trim().replace(/^@/, "");
 
-  // ── Strategy 1: extract numeric ID and fetch directly (most reliable) ─────
+  // Strategy 1: numeric ID → direct fetch
   const numericId = extractNumericId(trimmed);
   if (numericId) {
-    console.log(`Vinted stalker: trying direct ID lookup for ${numericId}`);
+    console.log(`Vinted stalker: direct ID lookup for ${numericId}`);
     const res = await fetch(`https://www.vinted.co.uk/api/v2/users/${numericId}`, { headers });
-    console.log(`Vinted stalker: direct ID lookup status ${res.status}`);
+    console.log(`Vinted stalker: direct ID status ${res.status}`);
     if (res.ok) {
       const data = await res.json();
       if (data.user) return data.user;
     }
   }
 
-  // ── Strategy 2: username — search Vinted for the user ────────────────────
+  // Strategy 2: username search
   const username = extractUsername(trimmed);
   if (username) {
-    console.log(`Vinted stalker: trying username search for ${username}`);
-
-    // Try login= param first
+    console.log(`Vinted stalker: username search for ${username}`);
     const loginRes = await fetch(
       `https://www.vinted.co.uk/api/v2/users?login=${encodeURIComponent(username)}&per_page=5`,
       { headers }
@@ -71,7 +115,6 @@ async function resolveVintedUser(input: string, token: string) {
       if (exact) return exact;
     }
 
-    // Try query= param
     const queryRes = await fetch(
       `https://www.vinted.co.uk/api/v2/users?query=${encodeURIComponent(username)}&per_page=10`,
       { headers }
@@ -97,24 +140,20 @@ export async function POST(req: NextRequest) {
   const { input } = await req.json();
   if (!input?.trim()) return NextResponse.json({ error: "Username or URL required" }, { status: 400 });
 
-  // Get Vinted token
-  const { data: conn } = await supabase
-    .from("vinted_connections")
-    .select("access_token")
-    .eq("user_id", user.id)
-    .single();
+  // Get a valid (possibly refreshed) token
+  const token = await getValidToken(supabase, user.id);
 
-  if (!conn?.access_token) {
+  if (!token) {
     return NextResponse.json({
-      error: "No Vinted account connected. Connect your Vinted account in AIO Tracker → Vinted tab first.",
-    }, { status: 400 });
+      error: "Your Vinted token has expired. Please reconnect your Vinted account in AIO Tracker → Vinted tab with a fresh token.",
+    }, { status: 401 });
   }
 
-  const vintedUser = await resolveVintedUser(input.trim(), conn.access_token);
+  const vintedUser = await resolveVintedUser(input.trim(), token);
 
   if (!vintedUser) {
     return NextResponse.json({
-      error: "Could not find that Vinted user. Paste the full profile URL for best results e.g. https://www.vinted.co.uk/member/241437643-belindawhite123",
+      error: "Could not find that Vinted user. Try the full profile URL e.g. https://www.vinted.co.uk/member/241437643-belindawhite123",
     }, { status: 404 });
   }
 
