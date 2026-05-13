@@ -1,17 +1,21 @@
 "use client";
 
+import UngatingAssistant from "@/components/fba/UngatingAssistant";
+import ReplenishmentAlerts from "@/components/fba/ReplenishmentAlerts";
+import AsinProfitCalc from "@/components/fba/AsinProfitCalc";
+
 import { useState, useCallback, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   Package, Search, PoundSterling, TrendingUp, RefreshCw, Upload,
   AlertCircle, CheckCircle, Loader2, ExternalLink, Download,
   BarChart3, ShoppingCart, Layers, FileSpreadsheet, X, Plus,
-  ChevronDown, ChevronUp, Tag, Info,
+  ChevronDown, ChevronUp, Tag, Info, Bell, Sparkles, Calculator,
 } from "lucide-react";
 
 const supabase = createClient();
 
-type FbaTab = "wholesale" | "reimbursements" | "reverse-asin" | "fifo" | "vat";
+type FbaTab = "wholesale" | "reimbursements" | "reverse-asin" | "fifo" | "vat" | "profit-calc" | "replenishment" | "ungating";
 
 const inputCls = "w-full rounded-xl border border-white/10 bg-[#030814] px-4 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-blue-400/40 transition";
 const selectCls = "w-full rounded-xl border border-white/10 bg-[#182235] px-4 py-2.5 text-sm text-white outline-none focus:border-blue-400/40 transition";
@@ -937,6 +941,9 @@ export default function FbaHubPage() {
     { id: "reverse-asin" as FbaTab, label: "Reverse ASIN", icon: Search },
     { id: "fifo" as FbaTab, label: "FIFO Cost of Goods", icon: Layers },
     { id: "vat" as FbaTab, label: "VAT P&L", icon: BarChart3 },
+    { id: "profit-calc" as FbaTab, label: "Profit Calculator", icon: Calculator },
+    { id: "replenishment" as FbaTab, label: "Replenishment Alerts", icon: Bell },
+    { id: "ungating" as FbaTab, label: "Ungating Assistant", icon: Sparkles },
   ];
 
   return (
@@ -988,6 +995,9 @@ export default function FbaHubPage() {
         {activeTab === "reverse-asin" && <ReverseAsinSearch />}
         {activeTab === "fifo" && <FifoCog />}
         {activeTab === "vat" && <VatPnl />}
+        {activeTab === "profit-calc" && <AsinProfitCalc />}
+        {activeTab === "replenishment" && <ReplenishmentAlerts />}
+        {activeTab === "ungating" && <UngatingAssistant />}
       </div>
     </div>
   );
