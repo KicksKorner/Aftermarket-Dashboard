@@ -15,20 +15,17 @@ async function postToTelegram(deal: DealPayload) {
   const emoji = priorityEmoji[deal.priority || "instant_cop"] || "🔥";
 
   // Build message text (Telegram MarkdownV2 needs escaping)
-  const escape = (text: string) => text.replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, "\\$&");
-
   const lines = [
-    `${emoji} *${escape(deal.description)}*`,
+    `${emoji} <b>${deal.description}</b>`,
     ``,
-    `💷 *£${escape(String(deal.price))}*`,
-    deal.destinationLabel ? `📂 ${escape(deal.destinationLabel)}` : "",
+    `💷 <b>£${String(deal.price)}</b>`,
+    deal.destinationLabel ? `📂 ${deal.destinationLabel}` : "",
     ``,
-    `👉 [View Deal](${deal.dealLink})`,
+    `👉 <a href="${deal.dealLink}">View Deal</a>`,
     ``,
-    `_Bargain Sniper UK_`,
+    `<i>Bargain Sniper UK</i>`,
   ].filter(Boolean).join("\n");
 
-  // If there's an image URL, send as photo with caption — otherwise send as text
   if (deal.imageUrl) {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
       method: "POST",
@@ -37,7 +34,7 @@ async function postToTelegram(deal: DealPayload) {
         chat_id: chatId,
         photo: deal.imageUrl,
         caption: lines,
-        parse_mode: "MarkdownV2",
+        parse_mode: "HTML",
       }),
     });
     const data = await res.json();
@@ -50,7 +47,7 @@ async function postToTelegram(deal: DealPayload) {
       body: JSON.stringify({
         chat_id: chatId,
         text: lines,
-        parse_mode: "MarkdownV2",
+        parse_mode: "HTML",
         disable_web_page_preview: false,
       }),
     });
