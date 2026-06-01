@@ -20,7 +20,7 @@ async function postToTelegram(deal: DealPayload) {
   const lines = [
     `${emoji} *${escape(deal.description)}*`,
     ``,
-    `💷 *£${escape(deal.price)}*`,
+    `💷 *£${escape(String(deal.price))}*`,
     deal.destinationLabel ? `📂 ${escape(deal.destinationLabel)}` : "",
     ``,
     `👉 [View Deal](${deal.dealLink})`,
