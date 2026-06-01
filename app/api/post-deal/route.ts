@@ -7,8 +7,6 @@ async function postToTelegram(deal: DealPayload) {
 
   if (!token || !chatId) throw new Error("TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set in environment variables.");
 
-  console.log("Telegram: sending to chat", chatId, "token starts with", token.substring(0, 10));
-
   const priorityEmoji: Record<string, string> = {
     instant_cop: "⚡",
     profitable: "💰",
@@ -16,7 +14,6 @@ async function postToTelegram(deal: DealPayload) {
   };
   const emoji = priorityEmoji[deal.priority || "instant_cop"] || "🔥";
 
-  // Build message text (Telegram MarkdownV2 needs escaping)
   const lines = [
     `${emoji} <b>${deal.description}</b>`,
     ``,
@@ -54,7 +51,6 @@ async function postToTelegram(deal: DealPayload) {
       }),
     });
     const data = await res.json();
-    console.log("Telegram sendMessage response:", JSON.stringify(data));
     if (!data.ok) throw new Error(data.description || "Telegram sendMessage failed");
     return data;
   }
@@ -104,6 +100,13 @@ export async function POST(req: NextRequest) {
 
     const results: Record<string, unknown> = { discord: null, telegram: null, website: null };
     const errors: Record<string, unknown> = {};
+    const debug: Record<string, unknown> = {
+      sendTelegramFlag: sendTelegram,
+      sendDiscordFlag: sendDiscord,
+      sendWebsiteFlag: sendWebsite,
+      chatId: process.env.TELEGRAM_CHAT_ID,
+      tokenExists: !!process.env.TELEGRAM_BOT_TOKEN,
+    };
 
     if (sendDiscord) {
       try { results.discord = await postToDiscord(deal); }
@@ -114,8 +117,8 @@ export async function POST(req: NextRequest) {
       try {
         results.telegram = await postToTelegram(deal);
       } catch (e: any) {
-        console.error("Telegram error full:", e?.message, JSON.stringify(e));
         errors.telegram = e?.message || "Telegram post failed";
+        debug.telegramError = String(e?.message);
       }
     }
 
@@ -124,7 +127,7 @@ export async function POST(req: NextRequest) {
       catch (e: any) { errors.website = e?.message || "Website post failed"; }
     }
 
-    return NextResponse.json({ ok: Object.keys(errors).length === 0, results, errors });
+    return NextResponse.json({ ok: Object.keys(errors).length === 0, results, errors, debug });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error?.message || "Server error" }, { status: 500 });
   }
