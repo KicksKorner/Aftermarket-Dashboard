@@ -31,7 +31,32 @@ function formatPrice(price: string | number) {
 function calcSavePct(price: string | number, was: string): string {
   const p = parseFloat(String(price)), w = parseFloat(was);
   if (!p || !w || w <= p) return "";
-  return ` (-${Math.round((1 - p / w) * 100)}%)`;
+  return ` (${Math.round((1 - p / w) * 100)}%)`;
+}
+
+async function uploadImageToSupabase(file: File): Promise<string | null> {
+  try {
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const mimeToExt: Record<string, string> = {
+      "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png",
+      "image/gif": "gif", "image/webp": "webp",
+    };
+    const ext = mimeToExt[file.type] || file.name.split(".").pop() || "jpg";
+    const fileName = `deal-images/${Date.now()}.${ext}`;
+    const buffer = await file.arrayBuffer();
+    const { error } = await supabase.storage
+      .from("public-assets")
+      .upload(fileName, buffer, { contentType: file.type || `image/${ext}`, upsert: true });
+    if (error) return null;
+    const { data } = supabase.storage.from("public-assets").getPublicUrl(fileName);
+    return data.publicUrl;
+  } catch {
+    return null;
+  }
 }
 
 async function postToDiscord(deal: DealPayload) {
@@ -81,7 +106,6 @@ async function postToDiscord(deal: DealPayload) {
 async function postToTelegram(deal: DealPayload) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
-
   if (!token || !chatId) throw new Error("TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set.");
 
   const priorityCfg = PRIORITY_CONFIG[deal.priority || "instant_cop"] ?? PRIORITY_CONFIG.instant_cop;
@@ -114,12 +138,7 @@ async function postToTelegram(deal: DealPayload) {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        photo: deal.imageUrl,
-        caption: lines,
-        parse_mode: "HTML",
-      }),
+      body: JSON.stringify({ chat_id: chatId, photo: deal.imageUrl, caption: lines, parse_mode: "HTML" }),
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.description || "Telegram sendPhoto failed");
@@ -128,12 +147,7 @@ async function postToTelegram(deal: DealPayload) {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: lines,
-        parse_mode: "HTML",
-        disable_web_page_preview: false,
-      }),
+      body: JSON.stringify({ chat_id: chatId, text: lines, parse_mode: "HTML", disable_web_page_preview: false }),
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.description || "Telegram sendMessage failed");
@@ -179,7 +193,8 @@ export async function POST(req: NextRequest) {
     const price = formData.get("price") as string;
     const was = (formData.get("was") as string) || "";
     const link = formData.get("link") as string;
-    const imageUrl = (formData.get("imageUrl") as string) || "";
+    let imageUrl = (formData.get("imageUrl") as string) || "";
+    const imageFile = formData.get("imageFile") as File | null;
     const category = (formData.get("category") as string) || "";
     const badge = (formData.get("badge") as string) || "";
     const expiry = (formData.get("expiry") as string) || "";
@@ -191,6 +206,12 @@ export async function POST(req: NextRequest) {
 
     if (!description || !price || !link) {
       return NextResponse.json({ ok: false, error: "description, price and link are required" }, { status: 400 });
+    }
+
+    // Upload image file to Supabase if provided, use the public URL for all platforms
+    if (imageFile && imageFile.size > 0) {
+      const uploaded = await uploadImageToSupabase(imageFile);
+      if (uploaded) imageUrl = uploaded;
     }
 
     const deal: DealPayload = {
