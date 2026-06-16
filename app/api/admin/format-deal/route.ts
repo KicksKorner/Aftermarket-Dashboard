@@ -47,13 +47,13 @@ const STYLE_INSTRUCTIONS: Record<string, string> = {
 };
 
 const COLOR_MAP: Record<string, number> = {
-  flips_update:        8704934,   // green
-  flips:               5763719,   // emerald
-  kicks_flips:         3447003,   // blue
-  member_flips:        10181046,  // purple
-  pokemon_flips:       16766720,  // gold/yellow
-  sneaker_streetwear:  1752220,   // cyan
-  pokemon_investments: 5793266,   // indigo
+  flips_update:        8704934,
+  flips:               5763719,
+  kicks_flips:         3447003,
+  member_flips:        10181046,
+  pokemon_flips:       16766720,
+  sneaker_streetwear:  1752220,
+  pokemon_investments: 5793266,
 };
 
 export async function POST(req: NextRequest) {
@@ -62,21 +62,23 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (profile?.role !== "admin" && profile?.role !== "owner") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { raw, channel, style, imageUrl } = await req.json();
   if (!raw?.trim()) return NextResponse.json({ error: "No input provided" }, { status: 400 });
 
-  const channelCtx = CHANNEL_CONTEXT[channel] || "general reselling deals";
-  const styleInstructions = STYLE_INSTRUCTIONS[style] || STYLE_INSTRUCTIONS.detailed;
-  const embedColor = COLOR_MAP[channel] || 5763719;
+  const channelCtx    = CHANNEL_CONTEXT[channel] || "general reselling deals";
+  const styleInstr    = STYLE_INSTRUCTIONS[style] || STYLE_INSTRUCTIONS.detailed;
+  const embedColor    = COLOR_MAP[channel] || 5763719;
 
   const systemPrompt = `You are a Discord content writer for Aftermarket Arbitrage, a UK reselling community.
 Your job is to convert raw deal information into a polished Discord webhook JSON payload.
 
 Channel: ${channelCtx}
 
-${styleInstructions}
+${styleInstr}
 
 CRITICAL RULES:
 - Return ONLY valid raw JSON — no markdown fences, no explanation, just the JSON object
@@ -103,12 +105,19 @@ Response format:
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY!, "anthropic-version": "2023-06-01" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": process.env.ANTHROPIC_API_KEY!,
+      "anthropic-version": "2023-06-01",
+    },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 2000,
       system: systemPrompt,
-      messages: [{ role: "user", content: `Format this into a Discord embed:\n\n${raw}${imageUrl ? `\n\nImage URL to include in the embed image field: ${imageUrl}` : ""}` }],
+      messages: [{
+        role: "user",
+        content: `Format this into a Discord embed:\n\n${raw}${imageUrl ? `\n\nImage URL to include in the embed image field: ${imageUrl}` : ""}`,
+      }],
     }),
   });
 
