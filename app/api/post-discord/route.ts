@@ -31,32 +31,7 @@ function formatPrice(price: string | number) {
 function calcSavePct(price: string | number, was: string): string {
   const p = parseFloat(String(price)), w = parseFloat(was);
   if (!p || !w || w <= p) return "";
-  return ` (${Math.round((1 - p / w) * 100)}%)`;
-}
-
-async function uploadImageToSupabase(file: File): Promise<string | null> {
-  try {
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-    const mimeToExt: Record<string, string> = {
-      "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png",
-      "image/gif": "gif", "image/webp": "webp",
-    };
-    const ext = mimeToExt[file.type] || file.name.split(".").pop() || "jpg";
-    const fileName = `deal-images/${Date.now()}.${ext}`;
-    const buffer = await file.arrayBuffer();
-    const { error } = await supabase.storage
-      .from("public-assets")
-      .upload(fileName, buffer, { contentType: file.type || `image/${ext}`, upsert: true });
-    if (error) return null;
-    const { data } = supabase.storage.from("public-assets").getPublicUrl(fileName);
-    return data.publicUrl;
-  } catch {
-    return null;
-  }
+  return ` (-${Math.round((1 - p / w) * 100)}%)`;
 }
 
 async function postToDiscord(deal: DealPayload) {
@@ -106,6 +81,7 @@ async function postToDiscord(deal: DealPayload) {
 async function postToTelegram(deal: DealPayload) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
+
   if (!token || !chatId) throw new Error("TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set.");
 
   const priorityCfg = PRIORITY_CONFIG[deal.priority || "instant_cop"] ?? PRIORITY_CONFIG.instant_cop;
@@ -138,7 +114,12 @@ async function postToTelegram(deal: DealPayload) {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, photo: deal.imageUrl, caption: lines, parse_mode: "HTML" }),
+      body: JSON.stringify({
+        chat_id: chatId,
+        photo: deal.imageUrl,
+        caption: lines,
+        parse_mode: "HTML",
+      }),
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.description || "Telegram sendPhoto failed");
@@ -147,7 +128,12 @@ async function postToTelegram(deal: DealPayload) {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text: lines, parse_mode: "HTML", disable_web_page_preview: false }),
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: lines,
+        parse_mode: "HTML",
+        disable_web_page_preview: false,
+      }),
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.description || "Telegram sendMessage failed");
@@ -182,6 +168,49 @@ async function saveDealToSupabase(deal: DealPayload) {
   return { ok: true };
 }
 
+
+async function postToFacebook(deal: DealPayload) {
+  const pageId = process.env.FACEBOOK_PAGE_ID;
+  const accessToken = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+  if (!pageId || !accessToken) throw new Error("FACEBOOK_PAGE_ID or FACEBOOK_PAGE_ACCESS_TOKEN not set.");
+
+  const wasPart = deal.was ? ` Was £${deal.was}${calcSavePct(deal.price, deal.was)}` : "";
+  const lines = [
+    deal.productTitle || deal.description,
+    deal.shortDescription || "",
+    "",
+    `💷 ${formatPrice(deal.price)}${wasPart}`,
+    deal.category ? `🏷️ ${deal.category}` : "",
+    "",
+    `👉 ${deal.dealLink}`,
+    "",
+    "Bargain Sniper UK",
+  ].filter(Boolean).join("\n");
+
+  const isValidUrl = (url: string) => { try { new URL(url); return url.startsWith("http"); } catch { return false; } };
+  const useImage = deal.imageUrl && isValidUrl(deal.imageUrl);
+
+  if (useImage) {
+    const form = new FormData();
+    form.append("caption", lines);
+    form.append("url", deal.imageUrl!);
+    form.append("access_token", accessToken);
+    const res = await fetch(`https://graph.facebook.com/v25.0/${pageId}/photos`, { method: "POST", body: form });
+    if (res.ok) return { ok: true };
+    const err = await res.text();
+    console.error("Facebook photo error:", err);
+    // Fall through to text post
+  }
+
+  const res = await fetch(`https://graph.facebook.com/v25.0/${pageId}/feed`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: lines, access_token: accessToken }),
+  });
+  if (!res.ok) throw new Error(await res.text() || "Facebook post failed");
+  return { ok: true };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -193,8 +222,7 @@ export async function POST(req: NextRequest) {
     const price = formData.get("price") as string;
     const was = (formData.get("was") as string) || "";
     const link = formData.get("link") as string;
-    let imageUrl = (formData.get("imageUrl") as string) || "";
-    const imageFile = formData.get("imageFile") as File | null;
+    const imageUrl = (formData.get("imageUrl") as string) || "";
     const category = (formData.get("category") as string) || "";
     const badge = (formData.get("badge") as string) || "";
     const expiry = (formData.get("expiry") as string) || "";
@@ -202,16 +230,11 @@ export async function POST(req: NextRequest) {
     const sendDiscord = formData.get("postToDiscord") !== "false";
     const sendTelegram = formData.get("postToTelegram") !== "false";
     const sendWebsite = formData.get("postToWebsite") === "true";
+    const sendFacebook = formData.get("postToFacebook") === "true";
     const priority = (formData.get("priority") as string) || "instant_cop";
 
     if (!description || !price || !link) {
       return NextResponse.json({ ok: false, error: "description, price and link are required" }, { status: 400 });
-    }
-
-    // Upload image file to Supabase if provided, use the public URL for all platforms
-    if (imageFile && imageFile.size > 0) {
-      const uploaded = await uploadImageToSupabase(imageFile);
-      if (uploaded) imageUrl = uploaded;
     }
 
     const deal: DealPayload = {
@@ -237,6 +260,11 @@ export async function POST(req: NextRequest) {
     if (sendWebsite) {
       try { results.website = await saveDealToSupabase(deal); }
       catch (e: any) { errors.website = e?.message || "Website post failed"; }
+    }
+
+    if (sendFacebook) {
+      try { results.facebook = await postToFacebook(deal); }
+      catch (e: any) { errors.facebook = e?.message || "Facebook post failed"; }
     }
 
     return NextResponse.json({ ok: Object.keys(errors).length === 0, results, errors });
