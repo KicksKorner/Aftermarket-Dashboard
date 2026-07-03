@@ -52,7 +52,6 @@ async function postToDiscord(deal: DealPayload) {
     : deal.description;
 
   const fields: { name: string; value: string; inline: boolean }[] = [
-    { name: "Priority", value: priorityCfg.label, inline: false },
     { name: "Price", value: `${formatPrice(deal.price)}${wasPart}${savePart}`, inline: true },
     ...(deal.category ? [{ name: "Category", value: deal.category, inline: true }] : []),
     ...(deal.badge ? [{ name: "Badge", value: deal.badge, inline: true }] : []),
