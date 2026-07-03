@@ -111,19 +111,7 @@ export default function DealPostPage() {
               </select>
             </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-300">Deal Priority</label>
-              <div className="grid grid-cols-3 gap-3">
-                {(Object.entries(PRIORITY_CONFIG) as [Priority, typeof PRIORITY_CONFIG[Priority]][]).map(([key, c]) => (
-                  <button key={key} type="button" onClick={() => setPriority(key)}
-                    className={`flex flex-col items-center gap-1.5 rounded-2xl border px-3 py-3 text-sm font-medium transition-all ${priority === key ? `${c.badgeBg} border-transparent text-white shadow-lg` : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20"}`}>
-                    <span className="text-xl">{c.emoji}</span><span className="text-xs text-center">{c.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
+<div>
               <label className="mb-2 block text-sm font-medium text-slate-300">Product Title</label>
               <input value={productTitle} onChange={e => setProductTitle(e.target.value)} placeholder="e.g. Nike Air Max 90 — Men's Trainers" required className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none placeholder:text-slate-500" />
             </div>
@@ -178,20 +166,7 @@ export default function DealPostPage() {
               </div>
             </div>
 
-            <div className="grid gap-5 md:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-300">Expiry Date <span className="text-slate-500">(optional)</span></label>
-                <input type="date" value={expiry} onChange={e => setExpiry(e.target.value)} className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none" />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-300">Deal of the Day?</label>
-                <select value={dotd ? "yes" : "no"} onChange={e => setDotd(e.target.value === "yes")} className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none">
-                  <option value="no">No</option><option value="yes">Yes ⭐</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
+<div>
               <label className="mb-2 block text-sm font-medium text-slate-300">Product Image URL <span className="text-slate-500">(optional)</span></label>
               <div className="flex items-center rounded-2xl border border-white/10 bg-[#030814] px-4">
                 <ImageIcon size={18} className="text-slate-500" />

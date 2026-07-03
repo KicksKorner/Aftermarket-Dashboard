@@ -175,8 +175,10 @@ async function postToFacebook(deal: DealPayload) {
   if (!pageId || !accessToken) throw new Error("FACEBOOK_PAGE_ID or FACEBOOK_PAGE_ACCESS_TOKEN not set.");
 
   const wasPart = deal.was ? ` Was £${deal.was}${calcSavePct(deal.price, deal.was)}` : "";
+  const titleLine = `🔥 ${deal.productTitle || deal.description} 🔥`;
   const lines = [
-    deal.productTitle || deal.description,
+    titleLine,
+    "──────────────────",
     deal.shortDescription || "",
     "",
     `💷 ${formatPrice(deal.price)}${wasPart}`,
@@ -185,6 +187,7 @@ async function postToFacebook(deal: DealPayload) {
     `👉 ${deal.dealLink}`,
     "",
     "Bargain Sniper UK",
+    "#Ad",
   ].filter(Boolean).join("\n");
 
   const isValidUrl = (url: string) => { try { new URL(url); return url.startsWith("http"); } catch { return false; } };
