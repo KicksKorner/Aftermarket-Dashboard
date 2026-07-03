@@ -168,6 +168,49 @@ async function saveDealToSupabase(deal: DealPayload) {
   return { ok: true };
 }
 
+
+async function postToFacebook(deal: DealPayload) {
+  const pageId = process.env.FACEBOOK_PAGE_ID;
+  const accessToken = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+  if (!pageId || !accessToken) throw new Error("FACEBOOK_PAGE_ID or FACEBOOK_PAGE_ACCESS_TOKEN not set.");
+
+  const wasPart = deal.was ? ` Was £${deal.was}${calcSavePct(deal.price, deal.was)}` : "";
+  const lines = [
+    deal.productTitle || deal.description,
+    deal.shortDescription || "",
+    "",
+    `💷 ${formatPrice(deal.price)}${wasPart}`,
+    deal.category ? `🏷️ ${deal.category}` : "",
+    "",
+    `👉 ${deal.dealLink}`,
+    "",
+    "Bargain Sniper UK",
+  ].filter(Boolean).join("\n");
+
+  const isValidUrl = (url: string) => { try { new URL(url); return url.startsWith("http"); } catch { return false; } };
+  const useImage = deal.imageUrl && isValidUrl(deal.imageUrl);
+
+  if (useImage) {
+    const form = new FormData();
+    form.append("caption", lines);
+    form.append("url", deal.imageUrl!);
+    form.append("access_token", accessToken);
+    const res = await fetch(`https://graph.facebook.com/v25.0/${pageId}/photos`, { method: "POST", body: form });
+    if (res.ok) return { ok: true };
+    const err = await res.text();
+    console.error("Facebook photo error:", err);
+    // Fall through to text post
+  }
+
+  const res = await fetch(`https://graph.facebook.com/v25.0/${pageId}/feed`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: lines, access_token: accessToken }),
+  });
+  if (!res.ok) throw new Error(await res.text() || "Facebook post failed");
+  return { ok: true };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -187,6 +230,7 @@ export async function POST(req: NextRequest) {
     const sendDiscord = formData.get("postToDiscord") !== "false";
     const sendTelegram = formData.get("postToTelegram") !== "false";
     const sendWebsite = formData.get("postToWebsite") === "true";
+    const sendFacebook = formData.get("postToFacebook") === "true";
     const priority = (formData.get("priority") as string) || "instant_cop";
 
     if (!description || !price || !link) {
@@ -216,6 +260,11 @@ export async function POST(req: NextRequest) {
     if (sendWebsite) {
       try { results.website = await saveDealToSupabase(deal); }
       catch (e: any) { errors.website = e?.message || "Website post failed"; }
+    }
+
+    if (sendFacebook) {
+      try { results.facebook = await postToFacebook(deal); }
+      catch (e: any) { errors.facebook = e?.message || "Facebook post failed"; }
     }
 
     return NextResponse.json({ ok: Object.keys(errors).length === 0, results, errors });

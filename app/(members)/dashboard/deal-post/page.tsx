@@ -15,8 +15,8 @@ const PRIORITY_CONFIG: Record<Priority, { label: string; emoji: string; discordC
 
 type ApiResponse = {
   ok?: boolean; error?: string;
-  results?: { discord?: unknown; telegram?: unknown; website?: unknown; };
-  errors?: { discord?: string | object | null; telegram?: string | object | null; website?: string | object | null; };
+  results?: { discord?: unknown; telegram?: unknown; website?: unknown; facebook?: unknown; };
+  errors?: { discord?: string | object | null; telegram?: string | object | null; website?: string | object | null; facebook?: string | object | null; };
 };
 
 const BADGE_OPTIONS = ["", "Hot", "New", "Limited", "Flash Sale", "Clearance"];
@@ -44,6 +44,7 @@ export default function DealPostPage() {
   const [postToDiscord, setPostToDiscord] = useState(true);
   const [postToTelegram, setPostToTelegram] = useState(true);
   const [postToWebsite, setPostToWebsite] = useState(true);
+  const [postToFacebook, setPostToFacebook] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<ApiResponse | null>(null);
@@ -77,7 +78,7 @@ export default function DealPostPage() {
       fd.append("category", category); fd.append("badge", badge); fd.append("expiry", expiry);
       fd.append("dotd", String(dotd)); fd.append("productTitle", productTitle);
       fd.append("shortDescription", description); fd.append("postToDiscord", String(postToDiscord));
-      fd.append("postToTelegram", String(postToTelegram)); fd.append("postToWebsite", String(postToWebsite));
+      fd.append("postToTelegram", String(postToTelegram)); fd.append("postToWebsite", String(postToWebsite)); fd.append("postToFacebook", String(postToFacebook));
       if (imageFile) fd.append("imageFile", imageFile);
       const res = await fetch("/api/post-discord", { method: "POST", body: fd });
       const data: ApiResponse = await res.json();
@@ -95,7 +96,7 @@ export default function DealPostPage() {
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-300"><Send size={24} /></div>
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Deal Poster</h1>
-            <p className="mt-2 text-slate-400">Post deals to Discord, Telegram and your website simultaneously.</p>
+            <p className="mt-2 text-slate-400">Post deals to Discord, Telegram, Facebook and your website simultaneously.</p>
           </div>
         </div>
       </section>
@@ -211,11 +212,12 @@ export default function DealPostPage() {
             {/* Destinations */}
             <div className="rounded-2xl border border-white/10 bg-[#030814] p-4">
               <div className="mb-3 text-sm font-medium text-slate-300">Post Destinations</div>
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-4">
                 {[
                   { label: "Discord", emoji: "🎮", checked: postToDiscord, set: setPostToDiscord },
                   { label: "Telegram", emoji: "✈️", checked: postToTelegram, set: setPostToTelegram },
                   { label: "Website", emoji: "🌐", checked: postToWebsite, set: setPostToWebsite },
+                  { label: "Facebook", emoji: "📘", checked: postToFacebook, set: setPostToFacebook },
                 ].map(({ label, emoji, checked, set }) => (
                   <label key={label} className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm text-slate-200 cursor-pointer transition ${checked ? "border-blue-500/30 bg-blue-500/10" : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"}`}>
                     <input type="checkbox" checked={checked} onChange={e => set(e.target.checked)} className="h-4 w-4 accent-blue-500" />
@@ -238,8 +240,9 @@ export default function DealPostPage() {
                   {postToDiscord && renderStatus("🎮 Discord", Boolean(result?.results?.discord), Boolean(result?.errors?.discord))}
                   {postToTelegram && renderStatus("✈️ Telegram", Boolean(result?.results?.telegram), Boolean(result?.errors?.telegram))}
                   {postToWebsite && renderStatus("🌐 Website", Boolean(result?.results?.website), Boolean(result?.errors?.website))}
+                  {postToFacebook && renderStatus("📘 Facebook", Boolean(result?.results?.facebook), Boolean(result?.errors?.facebook))}
                 </div>
-                {Boolean(result?.errors?.discord || result?.errors?.telegram || result?.errors?.website) && (
+                {Boolean(result?.errors?.discord || result?.errors?.telegram || result?.errors?.website || result?.errors?.facebook) && (
                   <pre className="mt-4 overflow-auto rounded-xl border border-red-400/10 bg-[#030814] p-3 text-xs text-red-200">{JSON.stringify(result.errors, null, 2)}</pre>
                 )}
               </div>
