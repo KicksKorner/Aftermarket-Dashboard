@@ -213,6 +213,31 @@ async function postToFacebook(deal: DealPayload) {
   return { ok: true };
 }
 
+async function uploadImageToSupabase(file: File): Promise<string | null> {
+  try {
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const mimeToExt: Record<string, string> = {
+      "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png",
+      "image/gif": "gif", "image/webp": "webp",
+    };
+    const ext = mimeToExt[file.type] || file.name.split(".").pop() || "jpg";
+    const fileName = `deal-images/${Date.now()}.${ext}`;
+    const buffer = await file.arrayBuffer();
+    const { error } = await supabase.storage
+      .from("public-assets")
+      .upload(fileName, buffer, { contentType: file.type || `image/${ext}`, upsert: true });
+    if (error) return null;
+    const { data } = supabase.storage.from("public-assets").getPublicUrl(fileName);
+    return data.publicUrl;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -224,7 +249,14 @@ export async function POST(req: NextRequest) {
     const price = formData.get("price") as string;
     const was = (formData.get("was") as string) || "";
     const link = formData.get("link") as string;
-    const imageUrl = (formData.get("imageUrl") as string) || "";
+    const imageFile = formData.get("imageFile") as File | null;
+    let imageUrl = (formData.get("imageUrl") as string) || "";
+
+    // Upload image file to Supabase if provided, use the public URL for all platforms
+    if (imageFile && imageFile.size > 0) {
+      const uploaded = await uploadImageToSupabase(imageFile);
+      if (uploaded) imageUrl = uploaded;
+    }
     const category = (formData.get("category") as string) || "";
     const badge = (formData.get("badge") as string) || "";
     const expiry = (formData.get("expiry") as string) || "";
