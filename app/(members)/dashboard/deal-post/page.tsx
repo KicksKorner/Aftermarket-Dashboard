@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Link as LinkIcon, PoundSterling, ImageIcon, Send, Upload } from "lucide-react";
+import { Link as LinkIcon, PoundSterling, ImageIcon, Send, Upload, Wand2, Loader2 } from "lucide-react";
 
 type Destination = "amazon" | "sneakers";
 type PreviewTab = "website" | "discord" | "telegram";
@@ -27,7 +27,23 @@ function calcSavePct(price: string, was: string): string {
   return Math.round((1 - p / w) * 100) + "%";
 }
 
+type KeepaVerdict = "genuine_low" | "good_deal" | "not_a_deal" | "unknown";
+type KeepaResult = { verdict: KeepaVerdict; message: string } | null;
+
+const KEEPA_BADGE: Record<KeepaVerdict, { emoji: string; label: string; cls: string }> = {
+  genuine_low: { emoji: "🟢", label: "Genuine Historic Low", cls: "border-emerald-400/20 bg-emerald-500/10 text-emerald-300" },
+  good_deal: { emoji: "🟡", label: "Good Deal (not lowest ever)", cls: "border-amber-400/20 bg-amber-500/10 text-amber-300" },
+  not_a_deal: { emoji: "🔴", label: "Not a real deal — price has been lower", cls: "border-red-400/20 bg-red-500/10 text-red-300" },
+  unknown: { emoji: "⚪", label: "Price history unavailable", cls: "border-white/10 bg-white/5 text-slate-400" },
+};
+
 export default function DealPostPage() {
+  const [amazonUrl, setAmazonUrl] = useState("");
+  const [asin, setAsin] = useState("");
+  const [fetching, setFetching] = useState(false);
+  const [fetchError, setFetchError] = useState("");
+  const [keepaChecking, setKeepaChecking] = useState(false);
+  const [keepaResult, setKeepaResult] = useState<KeepaResult>(null);
   const [destination, setDestination] = useState<Destination>("amazon");
   const [priority, setPriority] = useState<Priority>("instant_cop");
   const [productTitle, setProductTitle] = useState("");
@@ -68,6 +84,56 @@ export default function DealPostPage() {
     );
   }
 
+  async function runKeepaCheck(asinToCheck: string, currentPrice: string) {
+    setKeepaChecking(true);
+    setKeepaResult(null);
+    try {
+      const res = await fetch("/api/keepa-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asin: asinToCheck, currentPrice }),
+      });
+      const data = await res.json();
+      if (data.ok) setKeepaResult({ verdict: data.verdict, message: data.message });
+    } catch {
+      // Keepa check is a nice-to-have — silently skip on failure.
+    } finally {
+      setKeepaChecking(false);
+    }
+  }
+
+  async function handleFetchAmazon() {
+    if (!amazonUrl) return;
+    setFetching(true);
+    setFetchError("");
+    setKeepaResult(null);
+    try {
+      const res = await fetch("/api/scrape-amazon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: amazonUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setFetchError(data.error || "Couldn't fetch that product. Please fill the fields in manually.");
+        return;
+      }
+      if (data.title) setProductTitle(data.title);
+      if (data.image) setImageUrl(data.image);
+      if (data.price) setPrice(data.price);
+      if (data.wasPrice) setWas(data.wasPrice);
+      if (data.description) setDescription(data.description);
+      if (data.category) setCategory(data.category);
+      if (data.affiliateLink) setLink(data.affiliateLink);
+      setAsin(data.asin || "");
+      if (data.asin && data.price) runKeepaCheck(data.asin, data.price);
+    } catch {
+      setFetchError("Something went wrong reaching Amazon. Please fill the fields in manually.");
+    } finally {
+      setFetching(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setLoading(true); setMessage(""); setResult(null);
     try {
@@ -86,6 +152,7 @@ export default function DealPostPage() {
       if (!res.ok || !data.ok) { const failed = data.errors ? Object.keys(data.errors).join(", ") : ""; setMessage(failed ? `Some posts failed: ${failed}` : data.error || "Failed."); setLoading(false); return; }
       setMessage("Deal posted successfully. ✅");
       setProductTitle(""); setDescription(""); setPrice(""); setWas(""); setLink(""); setImageUrl(""); setImageFile(null); setCategory(""); setBadge(""); setExpiry(""); setDotd(false); setPriority("instant_cop");
+      setAmazonUrl(""); setAsin(""); setKeepaResult(null); setFetchError("");
     } catch { setMessage("Something went wrong."); } finally { setLoading(false); }
   }
 
@@ -104,6 +171,49 @@ export default function DealPostPage() {
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6">
           <form onSubmit={handleSubmit} className="grid gap-5">
+            <div className="rounded-2xl border border-blue-500/20 bg-blue-500/[0.04] p-4">
+              <label className="mb-2 block text-sm font-medium text-slate-300">Amazon URL <span className="text-slate-500">(auto-fill the fields below)</span></label>
+              <div className="flex gap-2">
+                <div className="flex flex-1 items-center rounded-2xl border border-white/10 bg-[#030814] px-4">
+                  <LinkIcon size={18} className="text-slate-500" />
+                  <input
+                    value={amazonUrl}
+                    onChange={e => setAmazonUrl(e.target.value)}
+                    placeholder="https://www.amazon.co.uk/dp/XXXXXXXXXX"
+                    className="w-full bg-transparent px-2 py-3 text-white outline-none placeholder:text-slate-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleFetchAmazon}
+                  disabled={fetching || !amazonUrl}
+                  className="flex items-center gap-2 whitespace-nowrap rounded-2xl bg-blue-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
+                >
+                  {fetching ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+                  {fetching ? "Fetching..." : "Fetch Details"}
+                </button>
+              </div>
+              {fetchError && (
+                <p className="mt-2 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-300">{fetchError}</p>
+              )}
+              {(keepaChecking || keepaResult) && (
+                <div className="mt-3 flex items-center gap-2">
+                  {keepaChecking ? (
+                    <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-400">
+                      <Loader2 size={12} className="animate-spin" /> Checking price history on Keepa...
+                    </span>
+                  ) : keepaResult ? (
+                    <span
+                      title={keepaResult.message}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${KEEPA_BADGE[keepaResult.verdict].cls}`}
+                    >
+                      {KEEPA_BADGE[keepaResult.verdict].emoji} {KEEPA_BADGE[keepaResult.verdict].label}
+                    </span>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-300">Send To</label>
               <select value={destination} onChange={e => setDestination(e.target.value as Destination)} className="w-full rounded-2xl border border-white/10 bg-[#030814] px-4 py-3 text-white outline-none">
