@@ -61,11 +61,9 @@ function scrapeFields($: cheerio.CheerioAPI): Omit<ScrapeResult, "asin" | "affil
     "#corePriceDisplay_desktop_feature_div .a-price .a-offscreen",
     ".reinventPricePriceToPayMargin .a-offscreen",
     "#tp_price_block_total_price_ww .a-offscreen",
-    "#sns-base-price .a-offscreen",
     "#priceblock_dealprice",
     "#priceblock_ourprice",
     ".a-price.apexPriceToPay .a-offscreen",
-    "#corePriceDisplay_desktop_feature_div .a-price .a-offscreen",
   ];
   let price = "";
   for (const sel of priceSelectors) {
@@ -87,6 +85,8 @@ function scrapeFields($: cheerio.CheerioAPI): Omit<ScrapeResult, "asin" | "affil
 
   // Fallback: some layouts (grocery, deals, regional experiments) don't match any
   // known selector — scan the price containers directly for £ amounts in order.
+  // (script/style tags are stripped by the caller before this runs, so this can't
+  // pick up embedded JSON/CSS price data from other variants.)
   if (!price) {
     const priceArea = $("#corePriceDisplay_desktop_feature_div, #corePrice_feature_div, #apex_desktop, #centerCol").first().text();
     const matches = [...priceArea.matchAll(/£\s?[\d,]+\.\d{2}/g)].map((m) => parsePrice(m[0]));
@@ -97,10 +97,28 @@ function scrapeFields($: cheerio.CheerioAPI): Omit<ScrapeResult, "asin" | "affil
     }
   }
 
-  const description = $("#feature-bullets ul li span.a-list-item")
-    .map((_, el) => $(el).text().trim())
-    .get()
-    .find((text) => text.length > 0) || "";
+  // Subscribe & Save price, if the listing offers one — this is the better deal to
+  // advertise, so it takes priority over the standard one-off price when present.
+  const snsPrice = parsePrice($("#sns-base-price .a-offscreen").first().text());
+  if (snsPrice) {
+    if (!wasPrice && price && price !== snsPrice) wasPrice = price;
+    price = snsPrice;
+  }
+
+  // Multi-buy / voucher promotions (e.g. "Get 3 for the price of 2", "Save 5% on any 4")
+  // shown on the listing — used as the short description instead of a generic bullet,
+  // since the product itself is already conveyed by the title + image.
+  const promoLines: string[] = [];
+  $('span[id^="promoMessagepctch"]').each((_, el) => {
+    const $el = $(el);
+    const hash = ($el.attr("id") || "").replace("promoMessagepctch", "");
+    const badgeText = $(`#greenBadgepctch${hash}`).text().trim();
+    const msgText = $el.clone().find("a").remove().end().text().trim().replace(/\s+/g, " ").replace(/\s*\|\s*$/, "");
+    if (!msgText) return;
+    const line = badgeText && badgeText.toLowerCase() !== "savings" ? `${badgeText} ${msgText}` : msgText;
+    promoLines.push(line);
+  });
+  const description = [...new Set(promoLines)].join(" • ");
 
   const crumbs = $("#wayfinding-breadcrumbs_feature_div ul li a")
     .map((_, el) => $(el).text().trim())
@@ -167,6 +185,9 @@ export async function POST(req: NextRequest) {
     }
 
     const $ = cheerio.load(html);
+    // Strip script/style so text-based extraction (price fallback scan, promo text)
+    // can't pick up embedded JSON state or inline CSS content.
+    $("script, style").remove();
     const fields = scrapeFields($);
 
     if (!fields.title && !fields.price) {
