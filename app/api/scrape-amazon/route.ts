@@ -159,6 +159,12 @@ export async function POST(req: NextRequest) {
         "User-Agent": USER_AGENT,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         "Accept-Language": "en-GB,en;q=0.9",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Referer": "https://www.google.com/",
       },
       redirect: "follow",
     });
@@ -207,7 +213,13 @@ export async function POST(req: NextRequest) {
       affiliateLink: affiliateUrl.toString(),
     };
 
-    return NextResponse.json({ ok: true, ...result });
+    // Amazon sometimes serves a degraded response (title/image present but pricing
+    // widgets stripped) without an outright block — flag it instead of failing silently.
+    const warning = !fields.price
+      ? "Fetched the product but couldn't read a price this time — Amazon may have limited what it served us. Please check/fill the price fields manually."
+      : undefined;
+
+    return NextResponse.json({ ok: true, ...result, warning });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error?.message || "Server error while scraping." }, { status: 500 });
   }

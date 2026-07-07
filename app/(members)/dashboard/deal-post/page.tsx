@@ -126,6 +126,7 @@ export default function DealPostPage() {
       if (data.category) setCategory(data.category);
       if (data.affiliateLink) setLink(data.affiliateLink);
       setAsin(data.asin || "");
+      if (data.warning) setFetchError(data.warning);
       if (data.asin && data.price) runKeepaCheck(data.asin, data.price);
     } catch {
       setFetchError("Something went wrong reaching Amazon. Please fill the fields in manually.");
