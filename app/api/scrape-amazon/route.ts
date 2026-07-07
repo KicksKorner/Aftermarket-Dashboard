@@ -59,9 +59,13 @@ function scrapeFields($: cheerio.CheerioAPI): Omit<ScrapeResult, "asin" | "affil
     "#corePriceDisplay_desktop_feature_div .a-price.priceToPay .a-offscreen",
     "#corePrice_feature_div .a-price .a-offscreen",
     "#corePriceDisplay_desktop_feature_div .a-price .a-offscreen",
+    ".reinventPricePriceToPayMargin .a-offscreen",
+    "#tp_price_block_total_price_ww .a-offscreen",
+    "#sns-base-price .a-offscreen",
     "#priceblock_dealprice",
     "#priceblock_ourprice",
     ".a-price.apexPriceToPay .a-offscreen",
+    "#corePriceDisplay_desktop_feature_div .a-price .a-offscreen",
   ];
   let price = "";
   for (const sel of priceSelectors) {
@@ -79,6 +83,18 @@ function scrapeFields($: cheerio.CheerioAPI): Omit<ScrapeResult, "asin" | "affil
   for (const sel of wasSelectors) {
     const val = parsePrice($(sel).first().text());
     if (val && val !== price) { wasPrice = val; break; }
+  }
+
+  // Fallback: some layouts (grocery, deals, regional experiments) don't match any
+  // known selector — scan the price containers directly for £ amounts in order.
+  if (!price) {
+    const priceArea = $("#corePriceDisplay_desktop_feature_div, #corePrice_feature_div, #apex_desktop, #centerCol").first().text();
+    const matches = [...priceArea.matchAll(/£\s?[\d,]+\.\d{2}/g)].map((m) => parsePrice(m[0]));
+    const unique = [...new Set(matches.filter(Boolean))];
+    if (unique.length) {
+      price = unique[0];
+      if (!wasPrice && unique.length > 1) wasPrice = unique[1];
+    }
   }
 
   const description = $("#feature-bullets ul li span.a-list-item")
