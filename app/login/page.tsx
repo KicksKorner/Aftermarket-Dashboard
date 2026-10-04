@@ -24,6 +24,10 @@ const errorMessages: Record<string, { text: string; showPricing: boolean }> = {
     text: "Authentication failed. Please try again.",
     showPricing: false,
   },
+  admin_only: {
+    text: "This portal is for admins only.",
+    showPricing: false,
+  },
 };
 
 const featureCards = [
@@ -78,7 +82,7 @@ function LoginForm() {
       setLoading(false);
       return;
     }
-    router.push("/dashboard");
+    router.push("/admin");
     router.refresh();
   }
 
@@ -116,9 +120,9 @@ function LoginForm() {
           />
         </div>
 
-        <h2 className="text-4xl font-semibold tracking-tight">Member Login</h2>
+        <h2 className="text-4xl font-semibold tracking-tight">Admin Login</h2>
         <p className="mt-3 text-slate-400">
-          Sign in to access your private dashboard.
+          Sign in to access the admin portal.
         </p>
       </div>
 
@@ -221,11 +225,11 @@ export default function LoginPage() {
               </div>
 
               <h1 className="text-5xl font-semibold tracking-tight">
-                Member Access
+                Admin Access
               </h1>
 
               <p className="mt-6 text-lg text-slate-400">
-                Your hub for reselling tools, guides, and exclusive member resources — all in one place.
+                Deal posting, guides and community management tools — all in one place.
               </p>
 
               <div className="mt-10 grid gap-4 sm:grid-cols-3">

@@ -28,12 +28,12 @@ export default function HomePage() {
           </div>
 
           <h1 className="mx-auto max-w-4xl text-5xl font-semibold tracking-tight sm:text-6xl lg:text-7xl">
-            Members Dashboard
+            Admin Portal
           </h1>
 
           <p className="mx-auto mt-6 max-w-3xl text-lg text-slate-400 sm:text-xl">
-            Private access for members, guides, links, tools, and future premium
-            features in one clean platform.
+            Private admin tools for posting deals, managing guides and running
+            the Aftermarket Arbitrage community.
           </p>
 
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -41,7 +41,7 @@ export default function HomePage() {
               href="/login"
               className="rounded-2xl bg-blue-600 px-8 py-4 text-base font-medium text-white transition hover:bg-blue-500"
             >
-              Member Login
+              Admin Login
             </Link>
           </div>
 

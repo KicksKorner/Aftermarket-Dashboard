@@ -3,14 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 const MEMBER_ROLE_ID = "726446805667020892";
 
+// Channel IDs keep their old names: kicks_flips is shown as "flips", pokemon_flips as "pokemon-info".
 const CHANNEL_CONTEXT: Record<string, string> = {
-  flips_update:        "General flip updates and restocks for resellers",
-  flips:               "Profitable flip opportunities for resellers",
-  kicks_flips:         "Sneaker and trainer flip opportunities",
-  member_flips:        "Member-exclusive flip deals",
-  pokemon_flips:       "Pokémon card and product flip opportunities",
+  kicks_flips:         "Profitable flip opportunities for resellers",
   sneaker_streetwear:  "Sneaker and streetwear reselling deals",
-  pokemon_investments: "Long-term Pokémon investment opportunities",
+  pokemon_flips:       "Pokémon news, restocks, release info and flip opportunities",
+  brick_flips:         "LEGO and brick set flip opportunities",
 };
 
 const STYLE_INSTRUCTIONS: Record<string, string> = {
@@ -47,13 +45,10 @@ const STYLE_INSTRUCTIONS: Record<string, string> = {
 };
 
 const COLOR_MAP: Record<string, number> = {
-  flips_update:        8704934,
-  flips:               5763719,
-  kicks_flips:         3447003,
-  member_flips:        10181046,
-  pokemon_flips:       16766720,
+  kicks_flips:         5763719,
   sneaker_streetwear:  1752220,
-  pokemon_investments: 5793266,
+  pokemon_flips:       16766720,
+  brick_flips:         15105570,
 };
 
 export async function POST(req: NextRequest) {

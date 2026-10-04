@@ -3,11 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
-import {
-  LayoutDashboard, BookOpen, Shield, LogOut, Boxes,
-  Receipt, Mail, Menu, X, Lock, ShoppingBag, Calculator, PoundSterling, Gamepad2, Users, ShoppingCart,
-} from "lucide-react";
+import { useState } from "react";
+import { BookOpen, Shield, LogOut, Menu, X } from "lucide-react";
 
 type SidebarProps = { role: string; email: string; };
 
@@ -16,24 +13,11 @@ type NavItem = {
   label: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
   startsWith?: boolean;
-  adminOnly?: boolean;
-  premiumLocked?: boolean;
-  lockedHref?: string;
 };
 
 const navItems: NavItem[] = [
-  { href: "/admin", label: "Admin", icon: Shield, adminOnly: true },
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/vinted-bot", label: "Vinted Bot", icon: ShoppingBag, startsWith: true, premiumLocked: true, lockedHref: "/vinted-bot/pricing" },
-  { href: "/dashboard/gmail-sync", label: "Gmail Sync", icon: Mail, startsWith: true, premiumLocked: true, lockedHref: "/upgrade" },
-  { href: "/dashboard/inventory", label: "AIO Tracker", icon: Boxes, startsWith: true },
-  { href: "/dashboard/expenses", label: "Expenses", icon: Receipt, startsWith: true },
-  { href: "/dashboard/profit-calculator", label: "Profit Calculator", icon: Calculator, startsWith: true },
-  { href: "/dashboard/vat-tracker", label: "VAT Tracker", icon: PoundSterling, startsWith: true },
-  { href: "/dashboard/pokemon-checkouts", label: "Pokémon Orders", icon: Gamepad2, startsWith: true },
-  { href: "/dashboard/vinted-stalker", label: "Profile Stalker", icon: Users, startsWith: true, premiumLocked: true, lockedHref: "/vinted-bot/pricing" },
-  { href: "/dashboard/fba-hub", label: "FBA Hub", icon: ShoppingCart, startsWith: true, premiumLocked: true, lockedHref: "/upgrade" },
-  { href: "/guides", label: "Guides", icon: BookOpen },
+  { href: "/admin", label: "Admin", icon: Shield, startsWith: true },
+  { href: "/guides", label: "Guides", icon: BookOpen, startsWith: true },
 ];
 
 const roleBadgeClass: Record<string, string> = {
@@ -46,10 +30,6 @@ function SidebarContent({ role, email, pathname, onNavigate }: { role: string; e
   const baseItem = "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition";
   const activeItem = "border border-white/10 bg-white/10 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)]";
   const inactiveItem = "text-slate-300 hover:bg-white/5 hover:text-white";
-  const lockedItem = "text-slate-300 cursor-pointer hover:bg-white/5 hover:text-white";
-  const isUnlocked = role === "premium" || role === "admin";
-
-  const filteredItems = useMemo(() => navItems.filter((item) => !item.adminOnly || role === "admin"), [role]);
 
   return (
     <div className="flex h-full flex-col">
@@ -57,7 +37,7 @@ function SidebarContent({ role, email, pathname, onNavigate }: { role: string; e
         <Image src="/logo.png" alt="Aftermarket Arbitrage" width={42} height={42} className="rounded-lg" />
         <div>
           <p className="text-xs text-blue-300">Aftermarket Arbitrage</p>
-          <h1 className="text-xl font-semibold tracking-tight">Members Area</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Admin Portal</h1>
         </div>
       </div>
 
@@ -70,16 +50,9 @@ function SidebarContent({ role, email, pathname, onNavigate }: { role: string; e
       </div>
 
       <nav className="space-y-2">
-        {filteredItems.map((item) => {
+        {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = item.startsWith ? pathname.startsWith(item.href) : pathname === item.href;
-          if (item.premiumLocked && !isUnlocked) {
-            return (
-              <Link key={item.href} href={item.lockedHref ?? "/upgrade"} onClick={onNavigate} className={`${baseItem} ${lockedItem}`}>
-                <Icon size={18} /><span className="flex-1">{item.label}</span><Lock size={13} className="text-slate-500" />
-              </Link>
-            );
-          }
           return (
             <Link key={item.href} href={item.href} onClick={onNavigate} className={`${baseItem} ${isActive ? activeItem : inactiveItem}`}>
               <Icon size={18} />{item.label}
@@ -111,7 +84,7 @@ export default function Sidebar({ role, email }: SidebarProps) {
             <Image src="/logo.png" alt="Aftermarket Arbitrage" width={34} height={34} className="rounded-lg" />
             <div>
               <p className="text-[11px] text-blue-300">Aftermarket Arbitrage</p>
-              <p className="text-base font-semibold leading-tight text-white">Members Area</p>
+              <p className="text-base font-semibold leading-tight text-white">Admin Portal</p>
             </div>
           </div>
           <button type="button" onClick={() => setOpen(true)} className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white" aria-label="Open menu">
@@ -133,7 +106,7 @@ export default function Sidebar({ role, email }: SidebarProps) {
                 <Image src="/logo.png" alt="Aftermarket Arbitrage" width={38} height={38} className="rounded-lg" />
                 <div>
                   <p className="text-xs text-blue-300">Aftermarket Arbitrage</p>
-                  <p className="text-lg font-semibold text-white">Members Area</p>
+                  <p className="text-lg font-semibold text-white">Admin Portal</p>
                 </div>
               </div>
               <button type="button" onClick={() => setOpen(false)} className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white" aria-label="Close menu">

@@ -26,6 +26,11 @@ export default async function MembersLayout({
   const role = profile?.role ?? "member";
   const email = user.email ?? "";
 
+  // Admin-only portal: everyone else is signed out and bounced to login.
+  if (role !== "admin") {
+    redirect("/auth/denied");
+  }
+
   return (
     <div className="min-h-screen bg-[#030814] text-white lg:grid lg:grid-cols-[270px_minmax(0,1fr)]">
       <Sidebar role={role} email={email} />

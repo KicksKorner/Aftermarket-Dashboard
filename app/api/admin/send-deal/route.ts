@@ -1,14 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 
+// Channel IDs keep their old names: kicks_flips is shown as "flips", pokemon_flips as "pokemon-info".
 const WEBHOOK_MAP: Record<string, string | undefined> = {
-  flips_update:        process.env.FLIPS_UPDATE_DISCORD_WEBHOOK_URL,
-  flips:               process.env.FLIPS_DISCORD_WEBHOOK_URL,
   kicks_flips:         process.env.KICKS_FLIPS_DISCORD_WEBHOOK_URL,
-  member_flips:        process.env.MEMBER_FLIPS_DISCORD_WEBHOOK_URL,
-  pokemon_flips:       process.env.POKEMON_FLIPS_DISCORD_WEBHOOK_URL,
   sneaker_streetwear:  process.env.SNEAKERS_CLOTHING_DISCORD_WEBHOOK_URL,
-  pokemon_investments: process.env.POKEMON_INVESTMENTS_DISCORD_WEBHOOK_URL,
+  pokemon_flips:       process.env.POKEMON_FLIPS_DISCORD_WEBHOOK_URL,
+  brick_flips:         process.env.BRICK_FLIPS_DISCORD_WEBHOOK_URL,
 };
 
 export async function POST(req: NextRequest) {

@@ -17,14 +17,12 @@ type DiscordPayload = {
   embeds?: DiscordEmbed[];
 };
 
+// IDs and env keys are kept from the old channel names so existing webhooks keep working.
 const CHANNELS = [
-  { id: "flips_update",        label: "📋 flips-update",                 envKey: "FLIPS_UPDATE" },
-  { id: "flips",               label: "💰 flips",                        envKey: "FLIPS" },
-  { id: "kicks_flips",         label: "👟 kicks-flips",                  envKey: "KICKS_FLIPS" },
-  { id: "member_flips",        label: "🎁 member-flips",                 envKey: "MEMBER_FLIPS" },
-  { id: "pokemon_flips",       label: "🃏 pokemon-flips",                envKey: "POKEMON_FLIPS" },
+  { id: "kicks_flips",         label: "💰 flips",                        envKey: "KICKS_FLIPS" },
   { id: "sneaker_streetwear",  label: "👟 sneaker-and-streetwear-flips", envKey: "SNEAKERS" },
-  { id: "pokemon_investments", label: "🔵 pokemon-investments",          envKey: "POKEMON_INVESTMENTS" },
+  { id: "pokemon_flips",       label: "🃏 pokemon-info",                 envKey: "POKEMON_FLIPS" },
+  { id: "brick_flips",         label: "🧱 brick-flips",                  envKey: "BRICK_FLIPS" },
 ];
 
 const STYLES = [
@@ -36,7 +34,7 @@ const STYLES = [
 
 export default function DealFormatterPage() {
   const [rawInput, setRawInput] = useState("");
-  const [channel, setChannel] = useState("pokemon_flips");
+  const [channel, setChannel] = useState("kicks_flips");
   const [style, setStyle] = useState("detailed");
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -249,7 +247,7 @@ export default function DealFormatterPage() {
         <div className="space-y-4">
           <div className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-5 space-y-4 min-h-[400px] flex flex-col">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">4 — Preview & send</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">5 — Preview & send</p>
               {preview && (
                 <div className="flex items-center gap-2">
                   <div className="flex rounded-xl border border-white/10 bg-white/5 p-0.5">
