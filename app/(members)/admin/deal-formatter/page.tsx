@@ -43,8 +43,8 @@ const FIND_FIELDS = [
   { key: "soldUrl", label: "eBay sold link",      placeholder: "https://www.ebay.co.uk/sch/i.html?...&LH_Sold=1" },
   { key: "emoji",   label: "Title emoji (optional)", placeholder: "🛍️" },
 ] as const;
-type FindKey = (typeof FIND_FIELDS)[number]["key"];
-const EMPTY_FIND: Record<FindKey, string> = { name: "", buy: "", amazon: "", resell: "", soldUrl: "", emoji: "" };
+type FindKey = (typeof FIND_FIELDS)[number]["key"] | "notes";
+const EMPTY_FIND: Record<FindKey, string> = { name: "", buy: "", amazon: "", resell: "", soldUrl: "", emoji: "", notes: "" };
 
 export default function DealFormatterPage() {
   const [rawInput, setRawInput] = useState("");
@@ -259,6 +259,12 @@ export default function DealFormatterPage() {
                     </label>
                   ))}
                 </div>
+                <label className="mt-3 block">
+                  <span className="mb-1 block text-xs text-slate-500">Notes (optional) — posted as “Notes from Kicks”, exactly as you write them</span>
+                  <textarea value={find.notes} onChange={e => setFind(prev => ({ ...prev, notes: e.target.value }))}
+                    rows={3} placeholder="e.g. Bought 3 myself — sizes 8 to 10 have sold quickest."
+                    className="w-full resize-y rounded-xl border border-white/10 bg-[#030814] px-3 py-2.5 text-sm text-white placeholder-slate-700 outline-none focus:border-violet-400/30 transition" />
+                </label>
                 <p className="mt-1.5 text-xs text-slate-600">Built to the same layout every time — profit is worked out as resell minus buy, before fees.</p>
               </div>
             )}

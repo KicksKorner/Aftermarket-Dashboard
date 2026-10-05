@@ -10,6 +10,7 @@ export type AmazonFindInput = {
   resell?: string | number;
   soldUrl?: string;
   emoji?: string;
+  notes?: string; // Lewis's own words, posted as-is under "Notes from Kicks"
 };
 
 // Same tag the rest of his tooling uses (AMAZON_ASSOCIATE_TAG). A tag already
@@ -63,6 +64,11 @@ export function buildAmazonFind(f: AmazonFindInput): { title: string; descriptio
   const profit = resell - buy;
   const profitText = profit < 1 ? "under £1" : `around £${Math.floor(profit)}`;
 
+  // Optional notes go in exactly as written: one line sits beside the
+  // heading, several start on the line below it.
+  const notes = String(f.notes ?? "").replace(/\r\n/g, "\n").trim().slice(0, 1500);
+  const notesBlock = !notes ? [] : notes.includes("\n") ? ["📝 **Notes from Kicks:**", notes] : [`📝 **Notes from Kicks:** ${notes}`];
+
   const emoji = String(f.emoji ?? "").trim() || DEFAULT_EMOJI;
   return {
     title: `${emoji} ${name}`.slice(0, 256),
@@ -70,6 +76,7 @@ export function buildAmazonFind(f: AmazonFindInput): { title: string; descriptio
       `🛒 **Retail:** ${money(buy)} – [Amazon](${link.url})`,
       `🏷️ **Resell:** ${money(resell)} – [eBay solds](${sold})`,
       `💷 **Profit:** ${profitText}, *it seems*, based on eBay solds`,
+      ...notesBlock,
       "*Check the eBay solds yourself, factor in fees and make your own judgement before buying.*",
     ].join("\n"),
   };
