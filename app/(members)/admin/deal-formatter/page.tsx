@@ -30,10 +30,25 @@ const STYLES = [
   { id: "quick",     label: "Quick Hit",  desc: "Short punchy alert — fast read" },
   { id: "restock",   label: "Restock",    desc: "In-store restock format with SKUs/EANs" },
   { id: "info",      label: "Information", desc: "Facts only — neatens up your info, adds nothing" },
+  { id: "amazon_finds", label: "Amazon Finds", desc: "Your Flip Finder finds — fixed layout, no AI" },
 ];
+
+// Amazon Finds is built in code from these fields (lib/amazon-finds.ts), not
+// rewritten by Claude — the layout is fixed.
+const FIND_FIELDS = [
+  { key: "name",    label: "Product name",        placeholder: "Imedeen Prime Renewal – 120 Tablets" },
+  { key: "buy",     label: "Buy price (£)",       placeholder: "30.39" },
+  { key: "amazon",  label: "Amazon link or ASIN", placeholder: "Paste the affiliate link from Flip Finder" },
+  { key: "resell",  label: "Resell price (£)",    placeholder: "41.55" },
+  { key: "soldUrl", label: "eBay sold link",      placeholder: "https://www.ebay.co.uk/sch/i.html?...&LH_Sold=1" },
+  { key: "emoji",   label: "Title emoji (optional)", placeholder: "🛍️" },
+] as const;
+type FindKey = (typeof FIND_FIELDS)[number]["key"];
+const EMPTY_FIND: Record<FindKey, string> = { name: "", buy: "", amazon: "", resell: "", soldUrl: "", emoji: "" };
 
 export default function DealFormatterPage() {
   const [rawInput, setRawInput] = useState("");
+  const [find, setFind] = useState<Record<FindKey, string>>(EMPTY_FIND);
   const [channel, setChannel] = useState("kicks_flips");
   const [style, setStyle] = useState("detailed");
   const [loading, setLoading] = useState(false);
@@ -79,8 +94,11 @@ export default function DealFormatterPage() {
     setUploadingImage(false);
   }
 
+  const isFind = style === "amazon_finds";
+  const canFormat = isFind ? !!(find.name.trim() && find.amazon.trim() && find.buy.trim() && find.resell.trim() && find.soldUrl.trim()) : !!rawInput.trim();
+
   async function handleFormat() {
-    if (!rawInput.trim()) return;
+    if (!canFormat) return;
     setLoading(true);
     setError("");
     setPreview(null);
@@ -90,7 +108,7 @@ export default function DealFormatterPage() {
       const res = await fetch("/api/admin/format-deal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ raw: rawInput, channel, style, imageUrl }),
+        body: JSON.stringify(isFind ? { find, channel, style, imageUrl } : { raw: rawInput, channel, style, imageUrl }),
       });
       const data = await res.json();
       if (res.ok && data.payload) {
@@ -227,8 +245,26 @@ export default function DealFormatterPage() {
               </div>
             </div>
 
+            {/* Amazon Finds: fixed-layout fields instead of raw notes */}
+            {isFind && (
+              <div>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">4 — Your find</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {FIND_FIELDS.map(f => (
+                    <label key={f.key} className={`block ${f.key === "name" || f.key === "soldUrl" ? "sm:col-span-2" : ""}`}>
+                      <span className="mb-1 block text-xs text-slate-500">{f.label}</span>
+                      <input value={find[f.key]} onChange={e => setFind(prev => ({ ...prev, [f.key]: e.target.value }))}
+                        placeholder={f.placeholder} inputMode={f.key === "buy" || f.key === "resell" ? "decimal" : undefined}
+                        className="w-full rounded-xl border border-white/10 bg-[#030814] px-3 py-2.5 text-sm text-white placeholder-slate-700 outline-none focus:border-violet-400/30 transition" />
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-xs text-slate-600">Built to the same layout every time — profit is worked out as resell minus buy, before fees.</p>
+              </div>
+            )}
+
             {/* Raw input */}
-            <div>
+            <div hidden={isFind}>
               <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">4 — Paste your raw info</p>
               <textarea
                 value={rawInput}
@@ -240,11 +276,11 @@ export default function DealFormatterPage() {
               <p className="mt-1.5 text-xs text-slate-600">Claude will rewrite this — spelling mistakes, rough notes, copied text all fine.</p>
             </div>
 
-            <button onClick={handleFormat} disabled={!rawInput.trim() || loading}
+            <button onClick={handleFormat} disabled={!canFormat || loading}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white hover:bg-violet-500 transition disabled:opacity-50">
               {loading
-                ? <><Loader2 size={14} className="animate-spin" /> Claude is formatting...</>
-                : <><Wand2 size={14} /> Format with AI</>}
+                ? <><Loader2 size={14} className="animate-spin" /> {isFind ? "Building post..." : "Claude is formatting..."}</>
+                : <><Wand2 size={14} /> {isFind ? "Build post" : "Format with AI"}</>}
             </button>
 
             {error && (
@@ -270,10 +306,12 @@ export default function DealFormatterPage() {
                       JSON
                     </button>
                   </div>
-                  <button onClick={handleFormat} title="Regenerate — get a different version"
-                    className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-400 hover:text-white transition">
-                    <RefreshCw size={11} /> Regenerate
-                  </button>
+                  {!isFind && (
+                    <button onClick={handleFormat} title="Regenerate — get a different version"
+                      className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-400 hover:text-white transition">
+                      <RefreshCw size={11} /> Regenerate
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -360,7 +398,7 @@ export default function DealFormatterPage() {
                     : sent ? <><Check size={14} /> Sent to Discord!</>
                     : <><Send size={14} /> Send to Discord</>}
                 </button>
-                <button onClick={() => { setPreview(null); setRawInput(""); setSent(false); }}
+                <button onClick={() => { setPreview(null); setRawInput(""); setFind(EMPTY_FIND); setSent(false); }}
                   className="rounded-xl border border-white/10 px-4 py-3 text-sm text-slate-400 hover:text-white transition">
                   Clear
                 </button>

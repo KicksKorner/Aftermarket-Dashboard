@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { findHype, stripHype } from "@/lib/hype-guard";
+import { buildAmazonFind } from "@/lib/amazon-finds";
 
 const MEMBER_ROLE_ID = "726446805667020892";
 
@@ -62,12 +63,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { raw, channel, style, imageUrl } = await req.json();
+  const { raw, channel, style, imageUrl, find } = await req.json();
+  const embedColor    = COLOR_MAP[channel] || 5763719;
+
+  // Amazon Finds: Lewis's fixed layout, built in code — no AI involved.
+  if (style === "amazon_finds") {
+    const built = buildAmazonFind(find || {});
+    if ("error" in built) return NextResponse.json({ error: built.error }, { status: 400 });
+    return NextResponse.json({ payload: toPayload(built, embedColor, imageUrl), rewrote: false, removed: [] });
+  }
+
   if (!raw?.trim()) return NextResponse.json({ error: "No input provided" }, { status: 400 });
 
   const channelCtx    = CHANNEL_CONTEXT[channel] || "general reselling deals";
   const styleInstr    = STYLE_INSTRUCTIONS[style] || STYLE_INSTRUCTIONS.detailed;
-  const embedColor    = COLOR_MAP[channel] || 5763719;
 
   // Members spend their own money on these posts. The old "exciting — act
   // immediately" tone line produced "don't sleep on this one!" on deals Lewis
@@ -141,18 +150,23 @@ Reply with only a JSON object — no markdown fences, no other text:
   // Still there after the rewrite (or the rewrite failed): cut the sentences.
   const removed = stripHype(embed, raw);
 
-  const payload = {
+  return NextResponse.json({ payload: toPayload(embed, embedColor, imageUrl), rewrote, removed });
+}
+
+// Ping, colour, footer and timestamp are set here for every style, never by
+// the model.
+function toPayload(embed: { title: string; description: string }, color: number, imageUrl?: string) {
+  return {
     content: `<@&${MEMBER_ROLE_ID}>`,
     embeds: [{
       title: embed.title.slice(0, 256),
       description: embed.description.slice(0, 4096),
-      color: embedColor,
+      color,
       footer: { text: "Aftermarket Arbitrage | 2026" },
       timestamp: new Date().toISOString(),
       ...(imageUrl ? { image: { url: imageUrl } } : {}),
     }],
   };
-  return NextResponse.json({ payload, rewrote, removed });
 }
 
 // The post is exactly a title and a description; structured outputs make the
