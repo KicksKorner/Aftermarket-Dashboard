@@ -87,7 +87,7 @@ WORDING — members spend their own money on these posts, so they must be accura
 - Let the numbers speak. Clear, friendly and confident is fine; salesy is not.
 
 FORMAT:
-- The description uses Discord markdown (**bold**, *italic*, \`code\`, [link](url)) with real line breaks.
+- The description uses Discord markdown (**bold**, *italic*, \`code\`, [link](url)). Inside the JSON, write each line break as \\n — the reply must be valid JSON.
 - UK context: £ not $, "retail" not "MSRP", British spelling.
 - EANs/SKUs/PIDs go in code blocks.
 - Vary the layout and emoji between posts so they don't look templated.
@@ -173,13 +173,44 @@ function parseEmbed(text: string): { title: string; description: string } | null
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start < 0 || end <= start) return null;
+  const json = text.slice(start, end + 1);
+  let obj: unknown;
   try {
-    const obj = JSON.parse(text.slice(start, end + 1));
-    // Older-format replies wrap the post in embeds[0].
-    const e = obj?.embeds?.[0] ?? obj;
-    if (typeof e?.title !== "string" || typeof e?.description !== "string") return null;
-    return { title: e.title, description: e.description };
+    obj = JSON.parse(json);
   } catch {
-    return null;
+    try {
+      obj = JSON.parse(escapeControlCharsInStrings(json));
+    } catch (err) {
+      console.error("Embed JSON unparseable:", (err as Error).message);
+      return null;
+    }
   }
+  // Older-format replies wrap the post in embeds[0].
+  const o = obj as { title?: unknown; description?: unknown; embeds?: { title?: unknown; description?: unknown }[] };
+  const e = o?.embeds?.[0] ?? o;
+  if (typeof e?.title !== "string" || typeof e?.description !== "string") return null;
+  return { title: e.title, description: e.description };
+}
+
+// Models sometimes put real line breaks inside JSON strings (a Discord post is
+// multi-line), which JSON.parse rejects. Escape raw newlines, carriage returns
+// and tabs that sit inside string literals; everything else is left alone.
+function escapeControlCharsInStrings(json: string): string {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (const ch of json) {
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      else if (ch === "\n") { out += "\\n"; continue; }
+      else if (ch === "\r") { out += "\\r"; continue; }
+      else if (ch === "\t") { out += "\\t"; continue; }
+    } else if (ch === '"') {
+      inString = true;
+    }
+    out += ch;
+  }
+  return out;
 }
