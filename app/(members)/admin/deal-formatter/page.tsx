@@ -42,6 +42,9 @@ export default function DealFormatterPage() {
   const [rawJson, setRawJson] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
+  // Hype/urgency wording the AI added that wasn't in the raw notes, and was
+  // rewritten or cut by the server (lib/hype-guard.ts).
+  const [wordingNote, setWordingNote] = useState("");
   const [copied, setCopied] = useState(false);
   const [viewMode, setViewMode] = useState<"visual" | "json">("visual");
   const [imageUrl, setImageUrl] = useState("");
@@ -82,6 +85,7 @@ export default function DealFormatterPage() {
     setError("");
     setPreview(null);
     setSent(false);
+    setWordingNote("");
     try {
       const res = await fetch("/api/admin/format-deal", {
         method: "POST",
@@ -96,6 +100,11 @@ export default function DealFormatterPage() {
           payload.embeds[0].image = { url: imageUrl };
         }
         setPreview(payload);
+        if (data.removed?.length) {
+          setWordingNote(`Removed wording you didn't write: ${data.removed.map((r: string) => `“${r}”`).join(" · ")}`);
+        } else if (data.rewrote) {
+          setWordingNote("Claude added hype you didn't write, so it was asked to rewrite the post without it.");
+        }
         setRawJson(JSON.stringify(payload, null, 2));
       } else {
         setError(data.error || "Failed to format. Try again.");
@@ -281,6 +290,12 @@ export default function DealFormatterPage() {
                 <Loader2 size={28} className="animate-spin mb-3 text-violet-400" />
                 <p className="text-sm text-slate-400">Claude is writing your deal post...</p>
                 <p className="mt-1 text-xs text-slate-600">Usually takes 3-5 seconds</p>
+              </div>
+            )}
+
+            {preview && !loading && wordingNote && (
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                {wordingNote}
               </div>
             )}
 
