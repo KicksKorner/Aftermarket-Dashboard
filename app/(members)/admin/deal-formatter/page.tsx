@@ -107,7 +107,8 @@ export default function DealFormatterPage() {
         }
         setRawJson(JSON.stringify(payload, null, 2));
       } else {
-        setError(data.error || "Failed to format. Try again.");
+        // detail = what the model actually replied / the API error, for diagnosis
+        setError((data.error || "Failed to format. Try again.") + (data.detail ? `\n\n${data.detail}` : ""));
       }
     } catch { setError("Something went wrong."); }
     setLoading(false);
@@ -247,7 +248,7 @@ export default function DealFormatterPage() {
             </button>
 
             {error && (
-              <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>
+              <div className="whitespace-pre-wrap break-words rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>
             )}
           </div>
         </div>

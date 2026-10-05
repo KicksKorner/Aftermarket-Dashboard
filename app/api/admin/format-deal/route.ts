@@ -97,19 +97,30 @@ Reply with only a JSON object — no markdown fences, no other text:
 
   const userMessage = { role: "user", content: `Raw notes:\n\n${raw}` };
 
+  const startedAt = Date.now();
   const first = await callClaude(systemPrompt, [userMessage]);
-  if (!first.ok) return NextResponse.json({ error: first.error }, { status: 500 });
+  if (!first.ok) return NextResponse.json({ error: first.error, detail: first.detail }, { status: 500 });
   let embed = parseEmbed(first.text);
   if (!embed) {
     console.error("JSON parse error, raw text:", first.text.substring(0, 500));
-    return NextResponse.json({ error: "Could not parse AI response. Try again." }, { status: 500 });
+    // Show what came back, so a screenshot of the error says why.
+    return NextResponse.json(
+      { error: "Could not parse AI response. Try again.", detail: `${first.engine.model} replied: ${first.text.slice(0, 300) || "(nothing)"}` },
+      { status: 500 },
+    );
   }
 
   // Wording Lewis didn't write: ask once for a rewrite without it.
   let rewrote = false;
   const hits = findHype(`${embed.title}\n${embed.description}`, raw);
-  if (hits.length) {
+  // A second model call doubles the wait; if the first was already slow,
+  // skip it and let stripHype cut the sentences instead, so the request
+  // stays inside the serverless function's time limit.
+  const timeForRewrite = Date.now() - startedAt < REWRITE_IF_FIRST_UNDER_MS;
+  if (hits.length && timeForRewrite) {
     const phrases = [...new Set(hits.map((h) => `"${h.phrase}"`))].join(", ");
+    // Same model as the draft, with its reply echoed back unchanged (thinking
+    // blocks included — the current models reject an edited history).
     const second = await callClaude(systemPrompt, [
       userMessage,
       { role: "assistant", content: first.content },
@@ -119,7 +130,7 @@ Reply with only a JSON object — no markdown fences, no other text:
           `That draft adds wording that isn't in my notes: ${phrases}. Rewrite it without those phrases or anything that means the same ` +
           `(no urgency, hype, scarcity or profit promises unless my notes say so). Keep every fact and the layout. Reply with only the JSON object.`,
       },
-    ]);
+    ], first.engine);
     const retry = second.ok ? parseEmbed(second.text) : null;
     if (retry) {
       embed = retry;
@@ -144,27 +155,75 @@ Reply with only a JSON object — no markdown fences, no other text:
   return NextResponse.json({ payload, rewrote, removed });
 }
 
-type ClaudeResult = { ok: true; text: string; content: unknown[] } | { ok: false; error: string };
+// The post is exactly a title and a description; structured outputs make the
+// API return valid JSON in that shape, so a reply can't fail to parse. (Quick
+// Hit kept failing to parse as free-text JSON on Sonnet 4.6, which doesn't
+// support structured outputs — hence the move to Opus 5.5.)
+const EMBED_SCHEMA = {
+  type: "object",
+  properties: {
+    title: { type: "string", description: "Embed title, under 256 characters" },
+    description: { type: "string", description: "Embed body in Discord markdown" },
+  },
+  required: ["title", "description"],
+  additionalProperties: false,
+};
 
-async function callClaude(system: string, messages: { role: string; content: unknown }[]): Promise<ClaudeResult> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY!,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 2000, system, messages }),
-  });
-  if (!res.ok) {
-    console.error("Claude API error:", await res.text());
-    return { ok: false, error: "AI formatting failed" };
+type Engine = { model: string; structured: boolean };
+
+const REWRITE_IF_FIRST_UNDER_MS = 8000;
+
+// Opus 5.5 at low effort: thinking can't be turned off on it, and a short
+// formatting job doesn't need more. fallbacks:"default" re-runs a request its
+// safety classifiers decline on Anthropic's recommended model, server-side.
+const PRIMARY: Engine = { model: "claude-opus-5-5", structured: true };
+// The previous setup, kept so the formatter still works if the primary
+// request is ever rejected outright (e.g. a parameter the API won't take).
+const LEGACY: Engine = { model: "claude-sonnet-4-6", structured: false };
+
+type ClaudeResult =
+  | { ok: true; text: string; content: unknown[]; engine: Engine }
+  | { ok: false; error: string; detail?: string };
+
+async function callClaude(
+  system: string,
+  messages: { role: string; content: unknown }[],
+  engine: Engine = PRIMARY,
+): Promise<ClaudeResult> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-api-key": process.env.ANTHROPIC_API_KEY!,
+    "anthropic-version": "2023-06-01",
+  };
+  const body: Record<string, unknown> = { model: engine.model, system, messages };
+  if (engine.structured) {
+    headers["anthropic-beta"] = "server-side-fallback-2026-07-01";
+    body.max_tokens = 16000; // thinking counts toward this
+    body.output_config = { effort: "low", format: { type: "json_schema", schema: EMBED_SCHEMA } };
+    body.fallbacks = "default";
+  } else {
+    body.max_tokens = 2000;
   }
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers, body: JSON.stringify(body) });
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`Claude API error (${engine.model}):`, errText);
+    // A rejected request (4xx other than rate limits) on the new setup: try
+    // the old one rather than leaving the formatter broken.
+    if (engine === PRIMARY && res.status >= 400 && res.status < 500 && res.status !== 429) {
+      const legacy = await callClaude(system, messages, LEGACY);
+      if (legacy.ok) return legacy;
+    }
+    return { ok: false, error: "AI formatting failed", detail: `${engine.model} ${res.status}: ${errText.slice(0, 200)}` };
+  }
+
   const data = await res.json();
   if (data.stop_reason === "refusal") return { ok: false, error: "Claude declined to format this. Try rewording the notes." };
+  if (data.stop_reason === "max_tokens") return { ok: false, error: "The AI reply was cut off. Try again." };
   const content: { type: string; text?: string }[] = data.content || [];
   const text = content.filter((b) => b.type === "text").map((b) => b.text || "").join("");
-  return { ok: true, text, content };
+  return { ok: true, text, content, engine };
 }
 
 // The reply should be a bare JSON object, but tolerate fences or a stray line
