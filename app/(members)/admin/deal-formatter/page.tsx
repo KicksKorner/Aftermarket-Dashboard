@@ -29,7 +29,7 @@ const STYLES = [
   { id: "detailed",  label: "Detailed",  desc: "Full breakdown with pricing, risk, why it flips" },
   { id: "quick",     label: "Quick Hit",  desc: "Short punchy alert — fast read" },
   { id: "restock",   label: "Restock",    desc: "In-store restock format with SKUs/EANs" },
-  { id: "investment",label: "Investment", desc: "Long-term hold analysis style" },
+  { id: "info",      label: "Information", desc: "Facts only — neatens up your info, adds nothing" },
 ];
 
 export default function DealFormatterPage() {
