@@ -16,7 +16,11 @@ const CHANNEL_CONTEXT: Record<string, string> = {
 const STYLE_INSTRUCTIONS: Record<string, string> = {
   detailed: `Create a detailed embed with:
 - A clear title with a relevant emoji
-- Description with sections for: time/date (if given), links (if given), pricing breakdown (retail/resell/profit — only figures from the notes), why it could flip (only reasons the notes give), and risks (what the notes say could go wrong; don't rate the risk yourself)
+- If the raw info has a tagline or heading of its own (e.g. "Don't sleep on this one"), use it as the short first line of the description, in bold, exactly as written. Never label it ("Notes heading:" etc.)
+- Then sections, each only if there is something for it: release info (date/time/type), where to buy (links, shipping, returns), pricing (retail / resell / profit, plus any risk rating given, shown as written e.g. "Risk rating: **1/5**"), and why it could flip (the reasons given)
+- Only add a risks section if the raw info mentions something that could go wrong. Don't rate the risk yourself
+- Each fact appears ONCE. Don't repeat the pricing, risk rating, shipping or returns in a later section
+- Short, plain lines, like a reseller telling his group about a drop. Bullet points are fine
 - Use bold text (**text**) for key numbers
 - Use section dividers: ──────────────────────
 - Include emoji to match the Discord aesthetic`,
@@ -94,6 +98,13 @@ WORDING — members spend their own money on these posts, so they must be accura
 - No hype, urgency or FOMO lines unless the notes themselves use them — e.g. "don't sleep on this", "don't miss out", "act fast", "won't last", "selling fast", "no-brainer", "easy money", "guaranteed", "low risk", "huge profit", "must cop", "absolute steal", "high demand", "limited stock".
 - If the notes sound cautious or unsure (thin margins, "check sold first", "risky", "not sure"), keep that caution clearly in the post — never soften it.
 - Let the numbers speak. Clear, friendly and confident is fine; salesy is not.
+
+VOICE — the raw notes are the poster's OWN info, so write it as his post, not a report about it:
+- Never mention "the notes", "the source", "the original notes", "the raw info" or "the poster" (no "notes say…", "according to the notes…", "the source's own rating").
+- State things directly: "Estimated profit: **£80+**", "Boxes are currently selling for over £100 profit on eBay", "Hobby box expected to sell out first".
+- Estimates and predictions keep the word the raw info uses ("estimated", "expected", "should") — that is enough. Don't add "(this is a prediction, not confirmed)", "not confirmed sold prices", "not ours" or similar disclaimers after each line.
+- At most ONE short closing line such as "*Always check eBay sold listings and do your own research before buying.*" — never repeat that caution elsewhere.
+- No filler lines that restate what's already in the post.
 
 FORMAT:
 - The description uses Discord markdown (**bold**, *italic*, \`code\`, [link](url)). Inside the JSON, write each line break as \\n — the reply must be valid JSON.
