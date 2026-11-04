@@ -13,9 +13,8 @@ export type AmazonFindInput = {
   notes?: string; // Lewis's own words, posted as-is under "Notes from Kicks"
 };
 
-// Same tag the rest of his tooling uses (AMAZON_ASSOCIATE_TAG). A tag already
-// on a pasted link — e.g. the Flip Finder's "Copy affiliate link" — wins.
-const DEFAULT_TAG = "bargainsniper-21";
+import { AMAZON_TAG } from "./amazon-affiliate";
+
 const DEFAULT_EMOJI = "🛍️";
 
 const ASIN_IN_URL = /\/(?:dp|gp\/product|gp\/aw\/d|product)\/([A-Z0-9]{10})(?:[/?#]|$)/i;
@@ -29,18 +28,13 @@ function price(v: string | number | undefined): number | null {
 
 const money = (n: number) => `£${n.toFixed(2)}`;
 
-// Rebuilt from just the ASIN plus the tag: only `tag` decides who's credited.
+// Rebuilt from just the ASIN plus Lewis's tag, whatever tag the pasted link
+// had: only `tag` decides who's credited, and staff post these too.
 function amazonLink(input: string): { url: string } | { error: string } {
   const s = input.trim();
   const asin = (s.match(ASIN_IN_URL) || [])[1] || (BARE_ASIN.test(s) ? s : null);
   if (!asin) return { error: "Couldn't find the product in that Amazon link — paste the full amazon.co.uk link or the ASIN." };
-  let tag = DEFAULT_TAG;
-  try {
-    tag = new URL(s).searchParams.get("tag") || DEFAULT_TAG;
-  } catch {
-    // a bare ASIN, not a URL
-  }
-  return { url: `https://www.amazon.co.uk/dp/${asin.toUpperCase()}?tag=${encodeURIComponent(tag)}` };
+  return { url: `https://www.amazon.co.uk/dp/${asin.toUpperCase()}?tag=${encodeURIComponent(AMAZON_TAG)}` };
 }
 
 export function buildAmazonFind(f: AmazonFindInput): { title: string; description: string } | { error: string } {

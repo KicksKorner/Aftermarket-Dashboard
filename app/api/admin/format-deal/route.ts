@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { findHype, stripHype } from "@/lib/hype-guard";
 import { buildAmazonFind } from "@/lib/amazon-finds";
+import { affiliatePayload } from "@/lib/amazon-affiliate";
 
 const MEMBER_ROLE_ID = "726446805667020892";
 
@@ -74,7 +75,8 @@ export async function POST(req: NextRequest) {
   if (style === "amazon_finds") {
     const built = buildAmazonFind(find || {});
     if ("error" in built) return NextResponse.json({ error: built.error }, { status: 400 });
-    return NextResponse.json({ payload: toPayload(built, embedColor, imageUrl), rewrote: false, removed: [] });
+    const { payload } = await affiliatePayload(toPayload(built, embedColor, imageUrl));
+    return NextResponse.json({ payload, rewrote: false, removed: [] });
   }
 
   if (!raw?.trim()) return NextResponse.json({ error: "No input provided" }, { status: 400 });
@@ -108,6 +110,7 @@ VOICE — the raw notes are the poster's OWN info, so write it as his post, not 
 
 FORMAT:
 - The description uses Discord markdown (**bold**, *italic*, \`code\`, [link](url)). Inside the JSON, write each line break as \\n — the reply must be valid JSON.
+- Write every link as a short markdown link, e.g. [Buy on Amazon](url) or [eBay solds](url), never a bare URL. Copy each URL exactly as given.
 - UK context: £ not $, "retail" not "MSRP", British spelling.
 - EANs/SKUs/PIDs go in code blocks.
 - Vary the layout and emoji between posts so they don't look templated.
@@ -161,7 +164,9 @@ Reply with only a JSON object — no markdown fences, no other text:
   // Still there after the rewrite (or the rewrite failed): cut the sentences.
   const removed = stripHype(embed, raw);
 
-  return NextResponse.json({ payload: toPayload(embed, embedColor, imageUrl), rewrote, removed });
+  // Lewis's Amazon tag on every Amazon link, shown as a short link.
+  const { payload } = await affiliatePayload(toPayload(embed, embedColor, imageUrl));
+  return NextResponse.json({ payload, rewrote, removed });
 }
 
 // Ping, colour, footer and timestamp are set here for every style, never by

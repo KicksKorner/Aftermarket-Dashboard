@@ -51,6 +51,16 @@ export default async function AdminOverviewPage() {
               Write and edit guides. They appear under Guides in the sidebar.
             </p>
           </Link>
+
+          <Link
+            href="/admin/lead-tracker"
+            className="rounded-[24px] border border-emerald-500/20 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-emerald-400/30"
+          >
+            <h2 className="text-xl font-semibold">📊 Lead Tracker</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              How many leads each staff member has posted with the Deal Formatter, for wages.
+            </p>
+          </Link>
         </div>
       </div>
     </main>

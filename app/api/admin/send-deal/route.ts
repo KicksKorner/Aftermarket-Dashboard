@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { affiliatePayload, type PostPayload } from "@/lib/amazon-affiliate";
 
 // Channel IDs keep their old names: kicks_flips is shown as "flips", pokemon_flips as "pokemon-info".
 const WEBHOOK_MAP: Record<string, string | undefined> = {
@@ -14,11 +15,11 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("role, discord_username").eq("id", user.id).single();
   if (profile?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { payload, channel, imageUrl } = await req.json();
-  if (!payload) return NextResponse.json({ error: "No payload" }, { status: 400 });
+  const { payload: sentPayload, channel, style, imageUrl } = await req.json();
+  if (!sentPayload) return NextResponse.json({ error: "No payload" }, { status: 400 });
 
   const webhookUrl = WEBHOOK_MAP[channel];
   if (!webhookUrl) {
@@ -27,6 +28,28 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
+  // Tagged again here, whatever the browser sent, so no Amazon link reaches
+  // members without Lewis's tag.
+  const { payload, products } = await affiliatePayload(sentPayload as PostPayload);
+
+  const sent = await postToDiscord(webhookUrl, payload, imageUrl);
+  if (!sent.ok) return NextResponse.json({ error: sent.error }, { status: 500 });
+
+  // One row per post that reached Discord: the Lead Tracker counts these.
+  const logged = await logPost({
+    user_id: user.id,
+    email: user.email ?? null,
+    discord_username: profile?.discord_username ?? null,
+    channel,
+    style: typeof style === "string" ? style : null,
+    title: payload.embeds?.[0]?.title ?? null,
+    products,
+  });
+
+  return NextResponse.json({ ok: true, logged });
+}
+
+async function postToDiscord(webhookUrl: string, payload: PostPayload, imageUrl?: string): Promise<{ ok: true } | { ok: false; error: string }> {
   // If we have an image, fetch it from Supabase and send as multipart
   if (imageUrl) {
     try {
@@ -49,7 +72,7 @@ export async function POST(req: NextRequest) {
 
         const discordRes = await fetch(webhookUrl, { method: "POST", body: form });
 
-        if (discordRes.ok) return NextResponse.json({ ok: true });
+        if (discordRes.ok) return { ok: true };
 
         const errText = await discordRes.text();
         console.error("Discord multipart error:", discordRes.status, errText);
@@ -70,8 +93,21 @@ export async function POST(req: NextRequest) {
   if (!res.ok) {
     const err = await res.text();
     console.error("Discord JSON error:", res.status, err);
-    return NextResponse.json({ error: `Discord error ${res.status}: ${err}` }, { status: 500 });
+    return { ok: false, error: `Discord error ${res.status}: ${err}` };
   }
 
-  return NextResponse.json({ ok: true });
+  return { ok: true };
+}
+
+// deal_posts has row level security on and no policies, so only the service
+// role reads or writes it. A failed insert never blocks the post itself.
+async function logPost(row: Record<string, unknown>): Promise<boolean> {
+  const { createClient: createAdminClient } = await import("@supabase/supabase-js");
+  const admin = createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  const { error } = await admin.from("deal_posts").insert(row);
+  if (error) {
+    console.error("deal_posts insert failed:", error.message);
+    return false;
+  }
+  return true;
 }

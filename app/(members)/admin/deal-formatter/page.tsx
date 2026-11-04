@@ -140,11 +140,13 @@ export default function DealFormatterPage() {
       const res = await fetch("/api/admin/send-deal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payload: preview, channel, imageUrl }),
+        body: JSON.stringify({ payload: preview, channel, style, imageUrl }),
       });
       if (res.ok) {
+        const d = await res.json();
         setSent(true);
         setTimeout(() => setSent(false), 5000);
+        if (d.logged === false) setWordingNote("Posted to Discord, but it wasn't counted in the Lead Tracker (its database table isn't set up yet).");
       } else {
         const d = await res.json();
         setError(d.error || "Failed to send.");
