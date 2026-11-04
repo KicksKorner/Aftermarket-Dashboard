@@ -6,9 +6,8 @@
 
 export const AMAZON_TAG = process.env.AMAZON_ASSOCIATE_TAG || "bargainsniper-21";
 
-// Amazon's required wording. It goes in the embed footer: small, but there on
-// every post with an Amazon link, which the Associates agreement asks for.
-export const ASSOCIATE_DISCLOSURE = "As an Amazon Associate we earn from qualifying purchases";
+// No "As an Amazon Associate…" line: Lewis checked with Amazon that posts to
+// his private server don't need it (2026-11-04). Public posts would.
 
 const LINK_TEXT = "Buy on Amazon";
 
@@ -37,9 +36,8 @@ function splitTrailing(url: string): { url: string; tail: string } {
   return m ? { url: url.slice(0, -m[0].length), tail: m[0] } : { url, tail: "" };
 }
 
-// What a pass over a post found: the products it links to, and how many
-// Amazon links of any kind (a search link has no product).
-export type Found = { asins: Set<string>; links: number };
+// What a pass over a post found: the products it links to.
+export type Found = { asins: Set<string> };
 
 function affiliateUrl(raw: string, resolved: Map<string, string>, found: Found): string | null {
   let url: URL;
@@ -49,7 +47,6 @@ function affiliateUrl(raw: string, resolved: Map<string, string>, found: Found):
     return null;
   }
   if (!AMAZON_HOST.test(url.hostname)) return null;
-  found.links++;
 
   const asin = url.pathname.match(ASIN_IN_PATH)?.[1]?.toUpperCase();
   if (asin) {
@@ -131,20 +128,11 @@ export async function affiliatePayload<T extends PostPayload>(payload: T): Promi
   const texts = embeds.flatMap((e) => [e.description ?? "", e.url ?? "", ...(e.fields ?? []).map((f) => f.value ?? "")]);
   const resolved = await resolveShortLinks(texts);
 
-  const found: Found = { asins: new Set(), links: 0 };
+  const found: Found = { asins: new Set() };
   for (const e of embeds) {
     if (e.description) e.description = affiliateText(e.description, resolved, found);
     for (const f of e.fields ?? []) if (f.value) f.value = affiliateText(f.value, resolved, found);
     if (e.url) e.url = affiliateUrl(e.url, resolved, found) ?? e.url;
-  }
-
-  if (found.links) {
-    for (const e of embeds) {
-      const text = e.footer?.text ?? "";
-      if (!text.includes(ASSOCIATE_DISCLOSURE)) {
-        e.footer = { ...e.footer, text: text ? `${text} · ${ASSOCIATE_DISCLOSURE}` : ASSOCIATE_DISCLOSURE };
-      }
-    }
   }
 
   return { payload: out, products: found.asins.size };
