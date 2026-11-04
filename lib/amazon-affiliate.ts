@@ -36,10 +36,7 @@ function splitTrailing(url: string): { url: string; tail: string } {
   return m ? { url: url.slice(0, -m[0].length), tail: m[0] } : { url, tail: "" };
 }
 
-// What a pass over a post found: the products it links to.
-export type Found = { asins: Set<string> };
-
-function affiliateUrl(raw: string, resolved: Map<string, string>, found: Found): string | null {
+function affiliateUrl(raw: string, resolved: Map<string, string>): string | null {
   let url: URL;
   try {
     url = new URL(resolved.get(raw) ?? raw);
@@ -50,7 +47,6 @@ function affiliateUrl(raw: string, resolved: Map<string, string>, found: Found):
 
   const asin = url.pathname.match(ASIN_IN_PATH)?.[1]?.toUpperCase();
   if (asin) {
-    found.asins.add(asin);
     return `https://www.amazon.co.uk/dp/${asin}?tag=${encodeURIComponent(AMAZON_TAG)}`;
   }
 
@@ -61,14 +57,14 @@ function affiliateUrl(raw: string, resolved: Map<string, string>, found: Found):
   return url.toString();
 }
 
-export function affiliateText(text: string, resolved: Map<string, string>, found: Found): string {
+export function affiliateText(text: string, resolved: Map<string, string>): string {
   return text.replace(LINK, (whole, label: string | undefined, mdUrl: string | undefined, angleUrl: string | undefined, bareUrl: string | undefined) => {
     if (mdUrl) {
-      const url = affiliateUrl(mdUrl, resolved, found);
+      const url = affiliateUrl(mdUrl, resolved);
       return url ? `[${label}](${url})` : whole;
     }
     const { url: link, tail } = angleUrl ? { url: angleUrl, tail: "" } : splitTrailing(bareUrl ?? "");
-    const url = affiliateUrl(link, resolved, found);
+    const url = affiliateUrl(link, resolved);
     return url ? `[${LINK_TEXT}](${url})${tail}` : whole;
   });
 }
@@ -120,20 +116,18 @@ type Embed = {
 
 export type PostPayload = { content?: string; embeds?: Embed[]; [key: string]: unknown };
 
-// Returns a tagged copy of the post and how many different Amazon products it
-// links to (the Lead Tracker records that next to each post).
-export async function affiliatePayload<T extends PostPayload>(payload: T): Promise<{ payload: T; products: number }> {
+// Returns a tagged copy of the post.
+export async function affiliatePayload<T extends PostPayload>(payload: T): Promise<{ payload: T }> {
   const out: T = JSON.parse(JSON.stringify(payload));
   const embeds = out.embeds ?? [];
   const texts = embeds.flatMap((e) => [e.description ?? "", e.url ?? "", ...(e.fields ?? []).map((f) => f.value ?? "")]);
   const resolved = await resolveShortLinks(texts);
 
-  const found: Found = { asins: new Set() };
   for (const e of embeds) {
-    if (e.description) e.description = affiliateText(e.description, resolved, found);
-    for (const f of e.fields ?? []) if (f.value) f.value = affiliateText(f.value, resolved, found);
-    if (e.url) e.url = affiliateUrl(e.url, resolved, found) ?? e.url;
+    if (e.description) e.description = affiliateText(e.description, resolved);
+    for (const f of e.fields ?? []) if (f.value) f.value = affiliateText(f.value, resolved);
+    if (e.url) e.url = affiliateUrl(e.url, resolved) ?? e.url;
   }
 
-  return { payload: out, products: found.asins.size };
+  return { payload: out };
 }

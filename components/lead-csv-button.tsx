@@ -7,7 +7,6 @@ export type LeadRow = {
   channel: string;
   style: string;
   title: string;
-  products: number;
 };
 
 // Quote every cell, and stop a cell starting with = + - @ being run as a
@@ -20,12 +19,12 @@ function cell(v: string | number): string {
 
 export default function LeadCsvButton({ rows, filename }: { rows: LeadRow[]; filename: string }) {
   function download() {
-    const header = ["Posted (UK time)", "Staff", "Email", "Channel", "Style", "Post title", "Amazon products"];
+    const header = ["Posted (UK time)", "Staff", "Email", "Channel", "Style", "Post title"];
     const lines = rows.map((r) => [
       new Date(r.postedAt).toLocaleString("en-GB", { timeZone: "Europe/London" }),
-      r.who, r.email, r.channel, r.style, r.title, r.products,
+      r.who, r.email, r.channel, r.style, r.title,
     ].map(cell).join(","));
-    const csv = "﻿" + [header.map(cell).join(","), ...lines].join("\r\n");
+    const csv = "\uFEFF" + [header.map(cell).join(","), ...lines].join("\r\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;

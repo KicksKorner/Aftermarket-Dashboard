@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
 
   // Tagged again here, whatever the browser sent, so no Amazon link reaches
   // members without Lewis's tag.
-  const { payload, products } = await affiliatePayload(sentPayload as PostPayload);
+  const { payload } = await affiliatePayload(sentPayload as PostPayload);
 
   const sent = await postToDiscord(webhookUrl, payload, imageUrl);
   if (!sent.ok) return NextResponse.json({ error: sent.error }, { status: 500 });
@@ -43,7 +43,6 @@ export async function POST(req: NextRequest) {
     channel,
     style: typeof style === "string" ? style : null,
     title: payload.embeds?.[0]?.title ?? null,
-    products,
   });
 
   return NextResponse.json({ ok: true, logged });

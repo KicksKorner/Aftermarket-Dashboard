@@ -34,8 +34,7 @@ const SETUP_SQL = `create table if not exists public.deal_posts (
   discord_username text,
   channel text,
   style text,
-  title text,
-  products integer not null default 0
+  title text
 );
 alter table public.deal_posts enable row level security;
 create index if not exists deal_posts_posted_at_idx on public.deal_posts (posted_at desc);`;
@@ -102,7 +101,7 @@ export default async function LeadTrackerPage({ searchParams }: { searchParams: 
   const admin = createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
   let query = admin
     .from("deal_posts")
-    .select("id, posted_at, user_id, email, discord_username, channel, style, title, products")
+    .select("id, posted_at, user_id, email, discord_username, channel, style, title")
     .order("posted_at", { ascending: false })
     .limit(5000);
   if (from) query = query.gte("posted_at", from.toISOString());
@@ -117,16 +116,14 @@ export default async function LeadTrackerPage({ searchParams }: { searchParams: 
     channel: CHANNEL_LABELS[r.channel] ?? r.channel ?? "",
     style: r.style ?? "",
     title: r.title ?? "",
-    products: r.products ?? 0,
   }));
 
   // One line per staff member, most posts first.
-  const byPerson = new Map<string, { who: string; email: string; posts: number; products: number; last: string; channels: Map<string, number> }>();
+  const byPerson = new Map<string, { who: string; email: string; posts: number; last: string; channels: Map<string, number> }>();
   for (const r of rows) {
     const key = r.email || r.who;
-    const p = byPerson.get(key) ?? { who: r.who, email: r.email, posts: 0, products: 0, last: r.postedAt, channels: new Map() };
+    const p = byPerson.get(key) ?? { who: r.who, email: r.email, posts: 0, last: r.postedAt, channels: new Map() };
     p.posts++;
-    p.products += r.products;
     p.channels.set(r.channel, (p.channels.get(r.channel) ?? 0) + 1);
     byPerson.set(key, p);
   }
@@ -190,7 +187,6 @@ export default async function LeadTrackerPage({ searchParams }: { searchParams: 
                       <tr>
                         <th className="py-2 pr-4">Staff</th>
                         <th className="py-2 pr-4">Posts</th>
-                        <th className="py-2 pr-4">Amazon products</th>
                         <th className="py-2 pr-4">Channels</th>
                         <th className="py-2">Last post</th>
                       </tr>
@@ -203,7 +199,6 @@ export default async function LeadTrackerPage({ searchParams }: { searchParams: 
                             {p.email && p.email !== p.who && <p className="text-xs text-slate-500">{p.email}</p>}
                           </td>
                           <td className="py-3 pr-4 text-lg font-semibold">{p.posts}</td>
-                          <td className="py-3 pr-4">{p.products}</td>
                           <td className="py-3 pr-4 text-xs text-slate-400">
                             {[...p.channels].map(([c, n]) => `${c} ${n}`).join(" · ")}
                           </td>
@@ -226,8 +221,7 @@ export default async function LeadTrackerPage({ searchParams }: { searchParams: 
                         <th className="py-2 pr-4">When</th>
                         <th className="py-2 pr-4">Staff</th>
                         <th className="py-2 pr-4">Channel</th>
-                        <th className="py-2 pr-4">Post</th>
-                        <th className="py-2">Products</th>
+                        <th className="py-2">Post</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -236,8 +230,7 @@ export default async function LeadTrackerPage({ searchParams }: { searchParams: 
                           <td className="whitespace-nowrap py-2 pr-4 text-slate-400">{fmtDate(r.postedAt)}</td>
                           <td className="py-2 pr-4">{r.who}</td>
                           <td className="py-2 pr-4 text-slate-400">{r.channel}</td>
-                          <td className="py-2 pr-4">{r.title}</td>
-                          <td className="py-2">{r.products}</td>
+                          <td className="py-2">{r.title}</td>
                         </tr>
                       ))}
                     </tbody>
