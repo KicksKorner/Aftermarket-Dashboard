@@ -112,7 +112,7 @@ export default async function AdminGuidesPage() {
       <div className="mx-auto max-w-6xl space-y-8">
         <div className="rounded-[24px] border border-blue-500/15 bg-[linear-gradient(180deg,rgba(9,18,46,0.96),rgba(5,10,26,0.92))] p-6">
           <p className="text-sm text-blue-300">Admin</p>
-          <h1 className="mt-2 text-3xl font-semibold">Guides</h1>
+          <h1 className="mt-2 text-3xl font-semibold">Guide Creation</h1>
         </div>
 
         <AdminSubnav />

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 const adminLinks = [
   { href: "/admin", label: "Overview", exact: true },
-  { href: "/admin/guides", label: "Guides" },
+  { href: "/admin/guides", label: "Guide Creation" },
 ];
 
 export default function AdminSubnav() {

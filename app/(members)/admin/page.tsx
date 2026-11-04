@@ -33,32 +33,22 @@ export default async function AdminOverviewPage() {
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <Link
-            href="/guides"
-            className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-blue-400/30"
-          >
-            <h2 className="text-xl font-semibold">Guides</h2>
-            <p className="mt-2 text-sm text-slate-400">
-              Read the member training guides, or add and edit them.
-            </p>
-          </Link>
-
-          <Link
-            href="/admin/premium-members"
-            className="rounded-[24px] border border-violet-500/20 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-violet-400/30"
-          >
-            <h2 className="text-xl font-semibold">👑 Premium Members</h2>
-            <p className="mt-2 text-sm text-slate-400">
-              Manage member packages, expiry dates and access levels.
-            </p>
-          </Link>
-
-          <Link
             href="/admin/deal-formatter"
             className="rounded-[24px] border border-violet-500/20 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-violet-400/30"
           >
             <h2 className="text-xl font-semibold">🪄 AI Deal Formatter</h2>
             <p className="mt-2 text-sm text-slate-400">
               Paste raw deal info — Claude rewrites it into a polished Discord embed.
+            </p>
+          </Link>
+
+          <Link
+            href="/admin/guides"
+            className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-blue-400/30"
+          >
+            <h2 className="text-xl font-semibold">📝 Guide Creation</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Write and edit guides. They appear under Guides in the sidebar.
             </p>
           </Link>
         </div>
