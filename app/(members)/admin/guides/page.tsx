@@ -48,7 +48,6 @@ async function addGuide(formData: FormData) {
 
   revalidatePath("/admin/guides");
   revalidatePath("/guides");
-  revalidatePath("/dashboard");
 }
 
 async function updateGuide(formData: FormData) {
@@ -77,7 +76,6 @@ async function updateGuide(formData: FormData) {
 
   revalidatePath("/admin/guides");
   revalidatePath("/guides");
-  revalidatePath("/dashboard");
 }
 
 async function deleteGuide(formData: FormData) {
@@ -93,14 +91,13 @@ async function deleteGuide(formData: FormData) {
 
   revalidatePath("/admin/guides");
   revalidatePath("/guides");
-  revalidatePath("/dashboard");
 }
 
 export default async function AdminGuidesPage() {
   const { supabase, user, isAdmin } = await requireAdmin();
 
   if (!user) redirect("/login");
-  if (!isAdmin) redirect("/dashboard");
+  if (!isAdmin) redirect("/auth/denied");
 
   const { data: guides } = await supabase
     .from("guides")

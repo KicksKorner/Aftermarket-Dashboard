@@ -61,7 +61,8 @@ export async function GET(request: Request) {
             email: user.email,
             discord_id: discordId,
             discord_username: discordUsername,
-            role: "member",
+            // No role here: new profiles get the column default ("member") and
+            // an existing admin keeps their role when they sign in again.
           },
           { onConflict: "id", ignoreDuplicates: false }
         );

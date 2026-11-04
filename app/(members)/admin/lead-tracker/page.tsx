@@ -91,7 +91,7 @@ export default async function LeadTrackerPage({ searchParams }: { searchParams: 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "admin") redirect("/dashboard");
+  if (profile?.role !== "admin") redirect("/auth/denied");
 
   const { period: requested } = await searchParams;
   const period: PeriodId = PERIODS.some((p) => p.id === requested) ? (requested as PeriodId) : "this-week";

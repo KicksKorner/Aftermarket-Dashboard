@@ -13,7 +13,7 @@ const inter = Inter({
 
 export const metadata = {
   title: "Aftermarket Arbitrage",
-  description: "Members dashboard",
+  description: "Aftermarket Arbitrage admin portal",
 };
 
 export const viewport = {

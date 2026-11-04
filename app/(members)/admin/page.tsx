@@ -18,7 +18,7 @@ export default async function AdminOverviewPage() {
     .eq("id", user.id)
     .single();
 
-  if (profile?.role !== "admin") redirect("/dashboard");
+  if (profile?.role !== "admin") redirect("/auth/denied");
 
   return (
     <main className="min-h-screen bg-[#030814] px-6 py-8 text-white">

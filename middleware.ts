@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
+  const response = NextResponse.next({
     request,
   });
 
@@ -27,12 +27,12 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isDashboardRoute =
-  request.nextUrl.pathname.startsWith("/dashboard") ||
+  const isProtectedRoute =
+  request.nextUrl.pathname.startsWith("/guides") ||
   request.nextUrl.pathname.startsWith("/admin");
   const isLoginRoute = request.nextUrl.pathname.startsWith("/login");
 
-  if (isDashboardRoute && !user) {
+  if (isProtectedRoute && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
@@ -48,5 +48,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/admin/:path*", "/login"],
+  matcher: ["/admin/:path*", "/guides/:path*", "/login"],
 };
