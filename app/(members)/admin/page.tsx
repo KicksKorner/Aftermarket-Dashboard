@@ -33,62 +33,12 @@ export default async function AdminOverviewPage() {
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <Link
-            href="/admin/members"
-            className="rounded-[24px] border border-emerald-500/20 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-emerald-400/30"
-          >
-            <h2 className="text-xl font-semibold">Members</h2>
-            <p className="mt-2 text-sm text-slate-400">
-              View all members, toggle Premium access and manage roles.
-            </p>
-          </Link>
-
-          <Link
-            href="/dashboard/deal-post"
-            className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-blue-400/30"
-          >
-            <h2 className="text-xl font-semibold">Deal Poster</h2>
-            <p className="mt-2 text-sm text-slate-400">
-              Post clean deal alerts to Discord.
-            </p>
-          </Link>
-
-          <Link
-            href="/dashboard/ama-webhook"
-            className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-blue-400/30"
-          >
-            <h2 className="text-xl font-semibold">AMA Webhook</h2>
-            <p className="mt-2 text-sm text-slate-400">
-              Manage and trigger AMA webhook notifications.
-            </p>
-          </Link>
-
-          <Link
-            href="/admin/guides"
+            href="/guides"
             className="rounded-[24px] border border-blue-500/15 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-blue-400/30"
           >
             <h2 className="text-xl font-semibold">Guides</h2>
             <p className="mt-2 text-sm text-slate-400">
-              Create and update member training guides.
-            </p>
-          </Link>
-
-          <Link
-  href="/admin/pokemon-investments"
-  className="rounded-[24px] border border-yellow-500/20 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-yellow-400/30"
->
-  <h2 className="text-xl font-semibold">🃏 Pokémon Investments</h2>
-  <p className="mt-2 text-sm text-slate-400">
-    Compose and send weekly investment breakdowns to Discord.
-  </p>
-</Link>
-
-          <Link
-            href="/admin/activity"
-            className="rounded-[24px] border border-amber-500/20 bg-[#071021] p-6 transition hover:-translate-y-0.5 hover:border-amber-400/30"
-          >
-            <h2 className="text-xl font-semibold">🏆 Member Activity</h2>
-            <p className="mt-2 text-sm text-slate-400">
-              Leaderboard showing member engagement, sales logged, revenue and platform usage.
+              Read the member training guides, or add and edit them.
             </p>
           </Link>
 

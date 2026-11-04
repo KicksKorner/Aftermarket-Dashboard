@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
@@ -157,6 +158,16 @@ export default async function AdminGuidesPage() {
                 key={guide.id}
                 className="rounded-[24px] border border-white/10 bg-[#030814] p-5"
               >
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-lg font-semibold">{guide.title}</h3>
+                  <Link
+                    href={`/guides/${guide.slug}`}
+                    className="rounded-2xl border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-300 hover:bg-blue-500/20"
+                  >
+                    View guide
+                  </Link>
+                </div>
+
                 <form action={updateGuide} className="grid gap-4">
                   <input type="hidden" name="id" value={guide.id} />
 

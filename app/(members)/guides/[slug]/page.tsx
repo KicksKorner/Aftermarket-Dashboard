@@ -14,7 +14,8 @@ function formatInline(text: string): string {
 }
 
 function renderContent(content: string) {
-  const lines = content.split("\n");
+  // Some guides were saved with literal "\n" text instead of real line breaks
+  const lines = content.replace(/\\r\\n|\\n/g, "\n").replace(/\r/g, "").split("\n");
   const elements: React.ReactNode[] = [];
   let key = 0;
 

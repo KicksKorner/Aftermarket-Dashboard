@@ -64,9 +64,17 @@ export default async function GuidesPage() {
             </p>
           </div>
         </div>
-        <div className="rounded-full border border-white/10 bg-[#0a1228] px-4 py-2 text-sm">
-          <span className="text-slate-500">Total guides: </span>
-          <span className="font-semibold text-white">{guides?.length ?? 0}</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="rounded-full border border-white/10 bg-[#0a1228] px-4 py-2 text-sm">
+            <span className="text-slate-500">Total guides: </span>
+            <span className="font-semibold text-white">{guides?.length ?? 0}</span>
+          </div>
+          <Link
+            href="/admin/guides"
+            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+          >
+            Add / edit guides
+          </Link>
         </div>
       </section>
 
