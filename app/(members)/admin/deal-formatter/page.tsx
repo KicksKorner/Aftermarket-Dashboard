@@ -38,13 +38,34 @@ const STYLES = [
 const FIND_FIELDS = [
   { key: "name",    label: "Product name",        placeholder: "Imedeen Prime Renewal – 120 Tablets" },
   { key: "buy",     label: "Buy price (£)",       placeholder: "30.39" },
-  { key: "amazon",  label: "Amazon link or ASIN", placeholder: "Paste the affiliate link from Flip Finder" },
+  { key: "amazon",  label: "Amazon link or ASIN", placeholder: "Paste the Amazon link from Flip Finder" },
   { key: "resell",  label: "Resell price (£)",    placeholder: "41.55" },
   { key: "soldUrl", label: "eBay sold link",      placeholder: "https://www.ebay.co.uk/sch/i.html?...&LH_Sold=1" },
   { key: "emoji",   label: "Title emoji (optional)", placeholder: "🛍️" },
 ] as const;
 type FindKey = (typeof FIND_FIELDS)[number]["key"] | "notes";
 const EMPTY_FIND: Record<FindKey, string> = { name: "", buy: "", amazon: "", resell: "", soldUrl: "", emoji: "", notes: "" };
+
+// Shows [text](url) links and **bold** the way Discord will, so a link reads as
+// its text ("Buy on Amazon") rather than markdown with the URL spelled out.
+const INLINE = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*\n]+)\*\*/g;
+
+function renderInline(text: string): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  for (const m of text.matchAll(INLINE)) {
+    const at = m.index ?? 0;
+    if (at > last) out.push(text.slice(last, at));
+    out.push(
+      m[1]
+        ? <a key={at} href={m[2]} target="_blank" rel="noreferrer" className="text-[#00a8fc] hover:underline">{m[1]}</a>
+        : <strong key={at} className="font-semibold text-white">{m[3]}</strong>,
+    );
+    last = at + m[0].length;
+  }
+  out.push(text.slice(last));
+  return out;
+}
 
 export default function DealFormatterPage() {
   const [rawInput, setRawInput] = useState("");
@@ -367,7 +388,7 @@ export default function DealFormatterPage() {
                           </p>
                         )}
                         {embed.description && (
-                          <p className="text-xs text-[#dbdee1] whitespace-pre-wrap leading-relaxed">{embed.description}</p>
+                          <p className="text-xs text-[#dbdee1] whitespace-pre-wrap leading-relaxed">{renderInline(embed.description)}</p>
                         )}
                         {embed.image?.url && (
                           <img src={embed.image.url} alt="" className="rounded mt-2 max-h-48 object-cover" />

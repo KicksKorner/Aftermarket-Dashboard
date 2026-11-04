@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
-import { affiliatePayload, type PostPayload } from "@/lib/amazon-affiliate";
+import { amazonPayload, type PostPayload } from "@/lib/amazon-affiliate";
 
 // Channel IDs keep their old names: kicks_flips is shown as "flips", pokemon_flips as "pokemon-info".
 const WEBHOOK_MAP: Record<string, string | undefined> = {
@@ -28,9 +28,9 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-  // Tagged again here, whatever the browser sent, so no Amazon link reaches
-  // members without Lewis's tag.
-  const { payload } = await affiliatePayload(sentPayload as PostPayload);
+  // Lewis's tag goes on here and only here, on the server: the preview staff
+  // see has none, and every Amazon link reaching members has it.
+  const payload = await amazonPayload(sentPayload as PostPayload, { withTag: true });
 
   const sent = await postToDiscord(webhookUrl, payload, imageUrl);
   if (!sent.ok) return NextResponse.json({ error: sent.error }, { status: 500 });

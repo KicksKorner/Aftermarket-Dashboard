@@ -13,8 +13,6 @@ export type AmazonFindInput = {
   notes?: string; // Lewis's own words, posted as-is under "Notes from Kicks"
 };
 
-import { AMAZON_TAG } from "./amazon-affiliate";
-
 const DEFAULT_EMOJI = "🛍️";
 
 const ASIN_IN_URL = /\/(?:dp|gp\/product|gp\/aw\/d|product)\/([A-Z0-9]{10})(?:[/?#]|$)/i;
@@ -28,13 +26,13 @@ function price(v: string | number | undefined): number | null {
 
 const money = (n: number) => `£${n.toFixed(2)}`;
 
-// Rebuilt from just the ASIN plus Lewis's tag, whatever tag the pasted link
-// had: only `tag` decides who's credited, and staff post these too.
+// Rebuilt from just the ASIN, dropping whatever tag the pasted link had. Lewis's
+// tag is added by send-deal when the post goes out, so staff never see it.
 function amazonLink(input: string): { url: string } | { error: string } {
   const s = input.trim();
   const asin = (s.match(ASIN_IN_URL) || [])[1] || (BARE_ASIN.test(s) ? s : null);
   if (!asin) return { error: "Couldn't find the product in that Amazon link — paste the full amazon.co.uk link or the ASIN." };
-  return { url: `https://www.amazon.co.uk/dp/${asin.toUpperCase()}?tag=${encodeURIComponent(AMAZON_TAG)}` };
+  return { url: `https://www.amazon.co.uk/dp/${asin.toUpperCase()}` };
 }
 
 export function buildAmazonFind(f: AmazonFindInput): { title: string; description: string } | { error: string } {

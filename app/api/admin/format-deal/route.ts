@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { findHype, stripHype } from "@/lib/hype-guard";
 import { buildAmazonFind } from "@/lib/amazon-finds";
-import { affiliatePayload } from "@/lib/amazon-affiliate";
+import { amazonPayload } from "@/lib/amazon-affiliate";
 
 const MEMBER_ROLE_ID = "726446805667020892";
 
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
   if (style === "amazon_finds") {
     const built = buildAmazonFind(find || {});
     if ("error" in built) return NextResponse.json({ error: built.error }, { status: 400 });
-    const { payload } = await affiliatePayload(toPayload(built, embedColor, imageUrl));
+    const payload = await amazonPayload(toPayload(built, embedColor, imageUrl), { withTag: false });
     return NextResponse.json({ payload, rewrote: false, removed: [] });
   }
 
@@ -164,8 +164,9 @@ Reply with only a JSON object — no markdown fences, no other text:
   // Still there after the rewrite (or the rewrite failed): cut the sentences.
   const removed = stripHype(embed, raw);
 
-  // Lewis's Amazon tag on every Amazon link, shown as a short link.
-  const { payload } = await affiliatePayload(toPayload(embed, embedColor, imageUrl));
+  // Amazon links cleaned and shown as short links. No tag here: send-deal
+  // adds it on the server, so staff never see it.
+  const payload = await amazonPayload(toPayload(embed, embedColor, imageUrl), { withTag: false });
   return NextResponse.json({ payload, rewrote, removed });
 }
 

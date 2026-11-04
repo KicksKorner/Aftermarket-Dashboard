@@ -1,8 +1,9 @@
-// Every Amazon link in a Deal Formatter post is rebuilt to carry Lewis's
-// Associates tag — whoever posts it, and whatever tag the pasted link had —
-// and a bare link is shown as a short "Buy on Amazon" link instead of the URL.
-// Runs when the post is built (so the preview shows it) and again just before
-// it goes to Discord, so nothing reaches members untagged.
+// Every Amazon link in a Deal Formatter post is rebuilt as a clean
+// amazon.co.uk/dp/ASIN link — whatever tag the pasted link had — and a bare
+// link is shown as a short "Buy on Amazon" link instead of the URL.
+// The preview staff see is cleaned but untagged: Lewis's Associates tag goes
+// on only in /api/admin/send-deal, on the server, as the post leaves for
+// Discord, so the tag never reaches anyone's browser.
 
 export const AMAZON_TAG = process.env.AMAZON_ASSOCIATE_TAG || "bargainsniper-21";
 
@@ -18,8 +19,8 @@ const ASIN_IN_PATH = /\/(?:dp|gp\/product|gp\/aw\/d|product|exec\/obidos\/ASIN)\
 // A markdown link, a <bracketed> link or a bare link, in that order.
 const LINK = /\[([^\]\n]*)\]\((https?:\/\/[^\s)]+)\)|<(https?:\/\/[^\s>]+)>|(https?:\/\/[^\s<>()[\]]+)/gi;
 
-// Affiliate and tracking parameters dropped from non-product Amazon links
-// before the tag is set, so no one else's ID rides along.
+// Affiliate and tracking parameters dropped from non-product Amazon links, so
+// no one else's ID rides along.
 const TRACKING_PARAMS = ["tag", "ascsubtag", "linkCode", "linkId", "ref_", "creative", "creativeASIN", "camp", "psc", "th"];
 
 function hostOf(url: string): string {
@@ -36,7 +37,7 @@ function splitTrailing(url: string): { url: string; tail: string } {
   return m ? { url: url.slice(0, -m[0].length), tail: m[0] } : { url, tail: "" };
 }
 
-function affiliateUrl(raw: string, resolved: Map<string, string>): string | null {
+function amazonUrl(raw: string, resolved: Map<string, string>, withTag: boolean): string | null {
   let url: URL;
   try {
     url = new URL(resolved.get(raw) ?? raw);
@@ -47,24 +48,25 @@ function affiliateUrl(raw: string, resolved: Map<string, string>): string | null
 
   const asin = url.pathname.match(ASIN_IN_PATH)?.[1]?.toUpperCase();
   if (asin) {
-    return `https://www.amazon.co.uk/dp/${asin}?tag=${encodeURIComponent(AMAZON_TAG)}`;
+    const clean = `https://www.amazon.co.uk/dp/${asin}`;
+    return withTag ? `${clean}?tag=${encodeURIComponent(AMAZON_TAG)}` : clean;
   }
 
-  // Not a product page (a search, a storefront): keep it, swap in the tag.
+  // Not a product page (a search, a storefront): keep it, minus anyone's tag.
   for (const p of TRACKING_PARAMS) url.searchParams.delete(p);
-  url.searchParams.set("tag", AMAZON_TAG);
+  if (withTag) url.searchParams.set("tag", AMAZON_TAG);
   url.hostname = "www.amazon.co.uk";
   return url.toString();
 }
 
-export function affiliateText(text: string, resolved: Map<string, string>): string {
+function amazonText(text: string, resolved: Map<string, string>, withTag: boolean): string {
   return text.replace(LINK, (whole, label: string | undefined, mdUrl: string | undefined, angleUrl: string | undefined, bareUrl: string | undefined) => {
     if (mdUrl) {
-      const url = affiliateUrl(mdUrl, resolved);
+      const url = amazonUrl(mdUrl, resolved, withTag);
       return url ? `[${label}](${url})` : whole;
     }
     const { url: link, tail } = angleUrl ? { url: angleUrl, tail: "" } : splitTrailing(bareUrl ?? "");
-    const url = affiliateUrl(link, resolved);
+    const url = amazonUrl(link, resolved, withTag);
     return url ? `[${LINK_TEXT}](${url})${tail}` : whole;
   });
 }
@@ -87,7 +89,7 @@ async function followToAmazon(start: string): Promise<string | null> {
   return null;
 }
 
-export async function resolveShortLinks(texts: string[]): Promise<Map<string, string>> {
+async function resolveShortLinks(texts: string[]): Promise<Map<string, string>> {
   const shorts = new Set<string>();
   for (const text of texts) {
     for (const m of text.matchAll(LINK)) {
@@ -116,18 +118,19 @@ type Embed = {
 
 export type PostPayload = { content?: string; embeds?: Embed[]; [key: string]: unknown };
 
-// Returns a tagged copy of the post.
-export async function affiliatePayload<T extends PostPayload>(payload: T): Promise<{ payload: T }> {
+// A copy of the post with its Amazon links cleaned, and tagged when withTag
+// is set (send-deal only; the preview is built without it).
+export async function amazonPayload<T extends PostPayload>(payload: T, { withTag }: { withTag: boolean }): Promise<T> {
   const out: T = JSON.parse(JSON.stringify(payload));
   const embeds = out.embeds ?? [];
   const texts = embeds.flatMap((e) => [e.description ?? "", e.url ?? "", ...(e.fields ?? []).map((f) => f.value ?? "")]);
   const resolved = await resolveShortLinks(texts);
 
   for (const e of embeds) {
-    if (e.description) e.description = affiliateText(e.description, resolved);
-    for (const f of e.fields ?? []) if (f.value) f.value = affiliateText(f.value, resolved);
-    if (e.url) e.url = affiliateUrl(e.url, resolved) ?? e.url;
+    if (e.description) e.description = amazonText(e.description, resolved, withTag);
+    for (const f of e.fields ?? []) if (f.value) f.value = amazonText(f.value, resolved, withTag);
+    if (e.url) e.url = amazonUrl(e.url, resolved, withTag) ?? e.url;
   }
 
-  return { payload: out };
+  return out;
 }
